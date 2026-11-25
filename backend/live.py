@@ -96,7 +96,15 @@ def snapshot(c,f,device_id=None):
     production=rows(c,"SELECT substr(p.created_at,1,16) `minute`,sum(p.quantity) quantity FROM production_reports p JOIN orders o ON o.id=p.order_id WHERE o.factory_id=? AND p.created_at>=? GROUP BY `minute`",(f,minutes[0]))
     minute_lookup={r['minute']:r['quantity'] for r in production}
     inspection=rows(c,'SELECT batch,sample_size,defects,created_at FROM quality WHERE order_id=? AND inspector=? ORDER BY id DESC LIMIT 8',(run['order_id'],'演示在线检测'))[::-1] if run else []
-    return {'server_time':current.isoformat(timespec='seconds'),'demo':describe(run,c),'device':device,'readings':history,'recent_readings':recent,
+    demo=describe(run,c)
+    if demo:
+        selected_device=device['id'] if device else None
+        demo['order']=None
+        if selected_device==run['device_id'] and device_id in (None,selected_device):
+            demo['order']=one(c,"""SELECT id,factory_id,device_id,code,batch,status,completed,quantity
+                                 FROM orders WHERE id=? AND factory_id=? AND device_id=?""",
+                              (run['order_id'],f,selected_device))
+    return {'server_time':current.isoformat(timespec='seconds'),'demo':demo,'device':device,'readings':history,'recent_readings':recent,
       'window_start':start,'minute_output':[{'time':m,'quantity':minute_lookup.get(m,0),'partial':i==14} for i,m in enumerate(minutes)],
       'inspections':inspection,'hourly':[{'hour':h[11:]+':00','quantity':lookup.get(h,0)} for h in hours],
       'events':rows(c,"SELECT id,action,entity,user_name,created_at FROM audit WHERE factory_id=? AND action NOT IN ('登录','退出登录','修改密码') ORDER BY id DESC LIMIT 12",(f,)),
@@ -399,9 +407,9 @@ def control(c,user,f,action,moment=None,*,intended_run_id=None):
     run=current_run(c,f)
     defense=state_of(run).get('defense') if run else None
     if action=='prepare-defense' or action in WAREHOUSE_ACTIONS or (defense and action!='start'):role(user,'engineer')
+    if intended_run_id is not None and (not run or run['id']!=intended_run_id):
+        raise ApiError('演示轮次已切换，请刷新工况后重试',409)
     if action in WAREHOUSE_ACTIONS:
-        if intended_run_id is not None and (not run or run['id']!=intended_run_id):
-            raise ApiError('演示轮次已切换，请刷新工况后重试',409)
         transfer_warehouse_stock(c,user,run,state_of(run) if run else {},action,stamp)
         return describe(one(c,'SELECT * FROM demo_runs WHERE id=?',(run['id'],)),c)
     if action=='prepare-defense':
@@ -430,6 +438,8 @@ def control(c,user,f,action,moment=None,*,intended_run_id=None):
         s=state_of(run);phase=s['phase']
         if defense and action in ('short-stop','changeover'):raise ApiError('答辩演示使用固定批次，无法手动短停或换料',409)
         if action=='fault':
+            if intended_run_id is not None and phase!='producing':
+                raise ApiError('当前已离开稳定生产，请刷新工况后重试',409)
             warehouse=defense.get('warehouse',{}) if defense else {}
             if 'shortage_output_index' in warehouse:
                 refill=warehouse.get('refill_output_index')

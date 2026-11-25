@@ -11,7 +11,7 @@ factory/
 │  ├─ sql/         MySQL主业务库、排班模块、节点库建表脚本
 │  ├─ assets/      登录后可访问的三路监控演示视频
 │  └─ fixtures/    初始化业务快照
-├─ unity/          Unity 2022.3.62f3c1 仿真工程
+├─ unity/          Unity 6 仿真工程与 Windows、WebGL 导出入口
 ├─ data/           本机连接配置、数据库和上传文件（首次配置生成）
 ├─ setup.bat       首次配置MySQL和Python依赖
 ├─ start.bat       电脑启动
@@ -67,7 +67,15 @@ MySQL安装在自定义位置时，可在运行setup.bat前设置 `ZY_MYSQLD` �
 
 ## Unity 仿真工厂
 
-在 Unity Hub 中添加 `unity/` 并使用 **2022.3.62f3c1** 打开。主场景为 `Assets/FactoryTwin/Scenes/FactoryCampus.unity`。本地导出 Windows 发布包后，可用 `unity/启动仿真工厂.bat` 启动。网页与仿真同机联动时，在 Unity 中填写 `http://127.0.0.1:8765` 和网页账号。详见 [Unity 运行说明](unity/运行说明.md)。
+在 Unity Hub 中添加 `unity/` 并使用 **6000.6.7f1** 打开。主场景为 `Assets/FactoryTwin/Scenes/FactoryCampus.unity`。本地导出 Windows 发布包后，可用 `unity/启动仿真工厂.bat` 启动。网页与 Windows 版同机联动时，在 Unity 中填写 `http://127.0.0.1:8765` 和网页账号。详见 [Unity 运行说明](unity/运行说明.md)。
+
+### 浏览器内的三维车间
+
+1. 在 Unity 中点「质因云联 → 导出网页三维程序」。需要 WebGL 构建模块。导出的本机文件存放在 `frontend/factory-3d/FactoryCampus/`，从源码克隆后需执行这一步。
+2. 双击 `start.bat` 启动网页。如果是从上一版本更新，先关闭原启动窗口中的服务。用管理员或星铸质量工程师登录，选择「星铸工厂 → 车间感知 → 进入三维车间」。
+3. 点「准备答辩场景」，核对侧栏的 `EQ-03`、工单和批次。等首条报工后，依次点「注入温控故障」「恢复温控」，待提示「等待复产确认」再点「确认复产」。左键拖动旋转，滚轮缩放。重演时先点「停止演示」。
+
+浏览器版使用当前网页登录与星铸答辩轮次。设备不匹配或读数过期时会暂停动作并提示原因。派单、点检和库位补料继续从现有工作台进入。如果三维资源加载失败，可回到设备示意图，或在「生产监控大屏」完成答辩流程。
 
 ## 手机访问
 

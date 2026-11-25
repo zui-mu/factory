@@ -1,10 +1,12 @@
 """Meaningful service integration tests against an isolated temporary database."""
 import unittest,tempfile,subprocess,sys,os,time,json,urllib.request,urllib.error,http.cookiejar,socket,threading
 from pathlib import Path
+from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
 from backend.ml import train,metrics,aggregate
 from backend.db import observations,connect
+from backend import server as platform_server
 from mysql_support import TestDatabases
 
 class Client:
@@ -20,6 +22,47 @@ class Client:
         try:
             with self.opener.open(request,timeout=30) as r:return r.status,json.load(r)
         except urllib.error.HTTPError as e:return e.code,json.load(e)
+
+class StaticWebGLTests(unittest.TestCase):
+    def test_uncompressed_build_mime_and_shell_only_wasm_policy(self):
+        with tempfile.TemporaryDirectory(prefix='zyyl-webgl-static-') as tmp:
+            web=Path(tmp).resolve()
+            (web/'index.html').write_text('<canvas id="unity-canvas"></canvas>',encoding='utf-8')
+            webgl=web/'factory-3d'/'FactoryCampus';build=webgl/'Build'
+            build.mkdir(parents=True)
+            (webgl/'index.html').write_text('<html>Unity output template</html>',encoding='utf-8')
+            binaries={'loader.js':b'/* loader */','framework.js':b'/* framework */',
+                      'data':b'\x00\x01game data','wasm':b'\x00asm\x01\x00\x00\x00'}
+            for ext,payload in binaries.items():(build/('FactoryCampus.'+ext)).write_bytes(payload)
+            guess=platform_server.mimetypes.guess_type
+
+            def without_platform_wasm_association(name):
+                if str(name).endswith('.wasm'):return None,None
+                return guess(name)
+
+            with patch.object(platform_server,'WEB',web), patch.object(platform_server.mimetypes,'guess_type',without_platform_wasm_association):
+                with platform_server.create_server('127.0.0.1',0,None) as server:
+                    thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+                    base='http://127.0.0.1:'+str(server.server_port)
+                    try:
+                        for path in ('/','/index.html?factory_id=1'):
+                            with urllib.request.urlopen(base+path,timeout=5) as reply:
+                                policy=reply.headers['Content-Security-Policy']
+                                self.assertIn("script-src 'self' 'wasm-unsafe-eval'",policy)
+                                self.assertNotIn("'unsafe-eval'",policy)
+                                self.assertIn("frame-ancestors 'none'",policy)
+                                self.assertEqual(reply.headers['X-Frame-Options'],'DENY')
+                        for ext,payload in binaries.items():
+                            with urllib.request.urlopen(base+'/factory-3d/FactoryCampus/Build/FactoryCampus.'+ext,timeout=5) as reply:
+                                self.assertEqual(reply.read(),payload)
+                                self.assertNotIn('wasm-unsafe-eval',reply.headers['Content-Security-Policy'])
+                                self.assertEqual(reply.headers['X-Content-Type-Options'],'nosniff')
+                                if ext=='wasm':self.assertEqual(reply.headers['Content-Type'],'application/wasm')
+                        for path in ('/api/health','/factory-3d/FactoryCampus/index.html'):
+                            with urllib.request.urlopen(base+path,timeout=5) as reply:
+                                self.assertNotIn('wasm-unsafe-eval',reply.headers['Content-Security-Policy'])
+                    finally:
+                        server.shutdown();thread.join(timeout=5)
 
 class PlatformTests(unittest.TestCase):
     @classmethod
@@ -285,7 +328,22 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(run['device_id'],3)
         self.assertEqual(run['staffing']['operator_id'],3)
         self.assertEqual(self.eng.call('/live/demo',prepare)[1]['id'],run['id'])
-        self.assertEqual(self.eng.call('/live?factory_id=1')[1]['demo']['id'],run['id'])
+        self.assertNotIn('order',run)
+        code,competing=self.eng.call('/orders',{'factory_id':1,'device_id':3,'product':'测试待排产工单',
+                                              'batch':'OTHER-BATCH','quantity':100,'due_date':'2099-12-31'})
+        self.assertEqual(code,200,competing)
+        self.assertGreater(competing['id'],run['order_id'])
+        code,snapshot=self.op.call('/live?factory_id=1&device_id=3')
+        self.assertEqual(code,200,snapshot)
+        self.assertEqual(snapshot['demo']['id'],run['id'])
+        self.assertEqual(snapshot['device']['id'],3)
+        order=snapshot['demo']['order']
+        self.assertEqual(set(order),{'id','factory_id','device_id','code','batch','status','completed','quantity'})
+        self.assertEqual((order['id'],order['factory_id'],order['device_id']),(run['order_id'],1,3))
+        self.assertTrue(order['batch'].startswith(order['code']))
+        self.assertNotEqual(order['batch'],'OTHER-BATCH')
+        self.assertEqual(self.other.call('/live?factory_id=1&device_id=3')[0],403)
+        self.assertIsNone(self.eng.call('/live?factory_id=1&device_id=1')[1]['demo']['order'])
         timeline='/live/timeline?factory_id=1&run_id='+str(run['id'])
         self.assertEqual(self.op.call(timeline)[0],403)
         self.assertEqual(self.other.call(timeline)[0],403)
@@ -318,6 +376,8 @@ class PlatformTests(unittest.TestCase):
         self.assertNotEqual(rehearsal['order_id'],run['order_id'])
         self.assertNotEqual(rehearsal['material_id'],run['material_id'])
         self.assertEqual(rehearsal['device_id'],3)
+        self.assertEqual(self.eng.call('/live/demo',{'factory_id':1,'action':'stop','run_id':run['id']})[0],409)
+        self.assertTrue(self.eng.call('/live?factory_id=1&device_id=3')[1]['demo']['running'])
         self.assertEqual(self.eng.call(timeline)[1]['interlocks'][0]['anomaly']['id'],anomaly_id)
         self.assertEqual(self.eng.call('/live/demo',{'factory_id':1,'action':'stop'})[0],200)
         self.assertEqual(self.eng.call('/devices/3/reading',{'temperature':74,'pressure':5,'vibration':.7})[0],200)

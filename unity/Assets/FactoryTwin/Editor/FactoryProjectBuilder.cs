@@ -111,5 +111,45 @@ namespace Zhiyin.FactoryTwin.Editor
             File.Copy("Assets/FactoryTwin/Resources/Fonts/OFL.txt","Build/Windows/字体许可证.txt",true);
             if(File.Exists("运行说明.md"))File.Copy("运行说明.md","Build/Windows/运行说明.md",true);
         }
+
+        [MenuItem("质因云联/导出网页三维程序")]
+        public static void BuildWebGL()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("请先停止播放。");
+            if (!File.Exists(ScenePath)) throw new FileNotFoundException("找不到现有仿真园区场景。", ScenePath);
+
+            string output = Path.GetFullPath("../frontend/factory-3d/FactoryCampus");
+            Directory.CreateDirectory(output);
+            var compression = PlayerSettings.WebGL.compressionFormat;
+            var threaded = PlayerSettings.WebGL.threadsSupport;
+            var hashed = PlayerSettings.WebGL.nameFilesAsHashes;
+            var fallback = PlayerSettings.WebGL.decompressionFallback;
+            try
+            {
+                PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
+                PlayerSettings.WebGL.threadsSupport = false;
+                PlayerSettings.WebGL.nameFilesAsHashes = false;
+                PlayerSettings.WebGL.decompressionFallback = false;
+                var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+                {
+                    scenes = new[] { ScenePath },
+                    locationPathName = output,
+                    target = BuildTarget.WebGL,
+                    options = BuildOptions.None
+                });
+                File.WriteAllText("Library/factory-webgl-result.txt",
+                    $"BUILD_{report.summary.result}\nErrors={report.summary.totalErrors}\nSize={report.summary.totalSize}\nDuration={report.summary.totalTime}");
+                if (report.summary.result != BuildResult.Succeeded)
+                    throw new InvalidOperationException($"WebGL build failed: {report.summary.result}");
+                File.Copy("Assets/FactoryTwin/Resources/Fonts/OFL.txt", Path.Combine(output, "OFL.txt"), true);
+            }
+            finally
+            {
+                PlayerSettings.WebGL.compressionFormat = compression;
+                PlayerSettings.WebGL.threadsSupport = threaded;
+                PlayerSettings.WebGL.nameFilesAsHashes = hashed;
+                PlayerSettings.WebGL.decompressionFallback = fallback;
+            }
+        }
     }
 }

@@ -3,6 +3,7 @@ import {overviewConditions} from './conditions.js';
 import {liveBar} from './live-ui.js';
 import {esc,fmt,pct,date,icon,badge,btn,empty,notice,table,scene,chartLine,graph} from './ui.js';
 import {renderMonitor,renderAssistant,federationVisual} from './experience.js';
+import {renderWorkshop3D,workshop3DLauncher} from './workshop-3d.js';
 export const navItems=[
  ['overview','运营总览','home','WORKSPACE'],['monitor','生产监控大屏','device'],['workshop','车间感知','cube'],['orders','生产管理','order'],['quality','质量管理','quality'],
  ['analysis','因果诊断','cause','INTELLIGENCE'],['assistant','AI 因果问答','cause'],['tasks','协同处置','tasks'],['federation','动态联邦分析','network'],
@@ -34,7 +35,8 @@ async function renderPageContent(page,S,api){
  }
  if(page==='workshop'){
   const devices=(await api('/devices'+query)).sort((a,b)=>Number(a.archived)-Number(b.archived)||Number(b.fresh)-Number(a.fresh)||a.id-b.id);S.cache.devices=devices;
-  return pageHead('车间感知','从设备状态到运行参数，连接现场的每一个变化。',btn(icon('refresh')+'刷新采集状态','refresh'))+
+  return pageHead('车间感知','从设备状态到运行参数，连接现场的每一个变化。',btn(icon('refresh')+'刷新采集状态','refresh')+workshop3DLauncher(S.factory))+
+   renderWorkshop3D(S.factory,S.user.role)+
    '<div class="grid2 mb16"><div class="card">'+cardHead('车间空间视图','轻量化设备示意 · 点击设备查看参数')+'<div class="scene-wrap">'+scene(devices,true)+'</div></div><div class="card">'+cardHead('现场采集与状态监测','支持手动录入采集值，通过接口对接采集程序')+
    '<div class="metric-strip"><div><strong>'+devices.length+'</strong><small>当前工厂设备</small></div><div><strong class="green">'+devices.filter(d=>d.fresh&&d.status==='运行').length+'</strong><small>运行中</small></div><div><strong class="orange">'+devices.filter(d=>d.fresh&&d.status==='预警').length+'</strong><small>参数预警</small></div></div>'+
    notice('设备颜色按有效采集显示，过期为通信未知。演示线15秒、普通采集120秒无更新时不计入在线运行。温度超过 90℃、压力超过 8MPa 或振动超过 3mm/s 时触发预警。这些阈值用于演示场景。')+'<div class="divider"></div><p class="instruction">选择设备可查看历史曲线、记录新的温度和压力等采集值。参数越限会进入异常工作台，支持继续分析与处置。</p></div></div>'+

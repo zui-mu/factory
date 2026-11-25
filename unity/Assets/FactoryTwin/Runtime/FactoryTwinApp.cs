@@ -16,6 +16,7 @@ namespace Zhiyin.FactoryTwin
         public bool interior;
         public bool Connected {get{return bridge!=null&&bridge.connected;}}
         public FactoryPlatformBridge bridge;
+        FactoryWebPresentation webPresentation;
         RectTransform ui,modal;
         Text brand,clock,mode,selection,context,eventText,valueText,valueNote,shiftText,shiftNote,modelRisk,riskTitle,modelInfo,modelMetrics,qualityNumbers,qualitySummary,sensors,sourceText;
         Text[] staffTexts=new Text[3]; Text[] qualityRows=new Text[4];
@@ -40,23 +41,46 @@ namespace Zhiyin.FactoryTwin
             if(orbit==null)orbit=Camera.main.gameObject.AddComponent<FactoryOrbitCamera>();
             foreach(var s in FindObjectsOfType<FactorySelectable>())if(!s.isEquipment&&s.transform.Find("外墙与屋顶")!=null)halls[s.lineIndex]=s.transform;
             if(EventSystem.current==null){new GameObject("EventSystem",typeof(EventSystem),typeof(StandaloneInputModule));}
-            bridge=gameObject.AddComponent<FactoryPlatformBridge>();bridge.app=this;
             for(int i=0;i<4;i++)outlineRenderers[i]=halls[i].Find("设备状态光环").GetComponentsInChildren<Renderer>();
+#if UNITY_WEBGL && !UNITY_EDITOR
+            webPresentation=new GameObject("FactoryWebPresentation").AddComponent<FactoryWebPresentation>();
+            webPresentation.Initialize(simulation);
+            Camera.main.rect=new Rect(0,0,1,1);
+            WebGLInput.captureAllKeyboardInput=false;
+#else
+            bridge=gameObject.AddComponent<FactoryPlatformBridge>();bridge.app=this;
             BuildUI(); Refresh();
             if(System.Array.IndexOf(Environment.GetCommandLineArgs(),"--factory-qa")>=0)gameObject.AddComponent<FactorySelfCheck>();
+#endif
             QualitySettings.vSyncCount=1;Application.targetFrameRate=60;
+        }
+#if UNITY_WEBGL && !UNITY_EDITOR
+        IEnumerator Start()
+        {
+            yield return null;
+            selectedLine=FactoryWebPresentation.LineIndex;
+            OpenInterior();
+        }
+#endif
+        internal bool ShouldAnimate(int lineIndex)
+        {
+            return simulation.lines[lineIndex].running && (Connected || simulation.playing || webPresentation!=null);
         }
         void Update()
         {
-            if(!Connected)simulation.Tick(Time.deltaTime);
-            refreshClock+=Time.deltaTime;
-            if(refreshClock>.5f){refreshClock=0;Refresh();}
+            if(webPresentation==null)
+            {
+                if(!Connected)simulation.Tick(Time.deltaTime);
+                refreshClock+=Time.deltaTime;
+                if(refreshClock>.5f){refreshClock=0;Refresh();}
+            }
             for(int i=0;i<4;i++)
             {
                 var line=simulation.lines[i];
                 Color color=!line.fresh?new Color(.5f,.59f,.61f):line.faulty||(line.status.Contains("预警")||line.status.Contains("故障"))?FactoryUI.Red:i==selectedLine?FactoryUI.Cyan:new Color(.23f,.55f,.60f);
                 foreach(var renderer in outlineRenderers[i])renderer.material.color=color;
             }
+            if(webPresentation!=null)return;
             if(Input.GetKeyDown(KeyCode.Escape)){if(modal!=null)CloseModal();else Home();}
             if(Input.GetKeyDown(KeyCode.Alpha1))SelectLine(0,false);
             if(Input.GetKeyDown(KeyCode.Alpha2))SelectLine(1,false);
@@ -65,6 +89,7 @@ namespace Zhiyin.FactoryTwin
         }
         void LateUpdate()
         {
+            if(webPresentation!=null)return;
             screenScale=Mathf.Min(Screen.width/1920f,Screen.height/1080f);
             screenLeft=(Screen.width-1920*screenScale)/2;screenBottom=(Screen.height-1080*screenScale)/2;
             Camera.main.rect=new Rect((screenLeft+463*screenScale)/Screen.width,(screenBottom+202*screenScale)/Screen.height,994*screenScale/Screen.width,708*screenScale/Screen.height);
@@ -177,15 +202,17 @@ namespace Zhiyin.FactoryTwin
         }
         public void SelectLine(int index,bool enter)
         {
+            if(webPresentation!=null)return;
             selectedLine=Mathf.Clamp(index,0,3);temperatures.Clear();
             if(bridge!=null)bridge.ClearPrediction();
-            if(enter)
-            {
-                foreach(var h in halls)h.Find("外墙与屋顶").gameObject.SetActive(h!=halls[selectedLine]);
-                interior=true;orbit.Focus(halls[selectedLine].position,true);
-            }
+            if(enter)OpenInterior();
             else if(interior) {Home();selectedLine=index;}
             simulation.Event("已选中"+simulation.lines[selectedLine].name+" · 四个面板按当前范围联动");Refresh();
+        }
+        void OpenInterior()
+        {
+            foreach(var hall in halls)hall.Find("外墙与屋顶").gameObject.SetActive(hall!=halls[selectedLine]);
+            interior=true;orbit.Focus(halls[selectedLine].position,true);
         }
         public void Home()
         {

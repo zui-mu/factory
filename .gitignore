@@ -12,6 +12,7 @@ __pycache__/
 !.env.example
 
 # Generated Unity files and machine-specific editor settings
+/frontend/factory-3d/FactoryCampus/
 /unity/[Bb]uild/
 /unity/[Bb]uilds/
 /unity/Library/

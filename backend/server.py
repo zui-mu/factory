@@ -20,7 +20,7 @@ def create_server(host,port,federation):
     class Handler(BaseHTTPRequestHandler):
         server_version="ZhiyinYunlian/1.0"
         def log_message(self,fmt,*args):pass
-        def response(self,data,status=200,ctype="application/json; charset=utf-8",headers=None):
+        def response(self,data,status=200,ctype="application/json; charset=utf-8",headers=None,*,allow_wasm=False):
             body=json.dumps(data,ensure_ascii=False,allow_nan=False).encode() if ctype.startswith("application/json") else data
             self.send_response(status)
             self.send_header("Content-Type",ctype);self.send_header("Content-Length",str(len(body)))
@@ -28,7 +28,8 @@ def create_server(host,port,federation):
             self.send_header("X-Frame-Options","DENY")
             self.send_header("Referrer-Policy","same-origin")
             self.send_header("Cache-Control","no-store" if self.path.startswith("/api") else "no-cache")
-            self.send_header("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+            script_src="'self' 'wasm-unsafe-eval'" if allow_wasm else "'self'"
+            self.send_header("Content-Security-Policy",f"default-src 'self'; script-src {script_src}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
             for k,v in (headers or {}).items():self.send_header(k,v)
             self.end_headers()
             try:self.wfile.write(body)
@@ -59,7 +60,8 @@ def create_server(host,port,federation):
                 if self.command!="GET":raise ApiError("不支持的方法",405)
                 file=(WEB/("index.html" if path=="/" else path.lstrip("/"))).resolve()
                 if WEB not in file.parents or not file.is_file():raise ApiError("文件不存在",404)
-                return self.response(file.read_bytes(),ctype=mimetypes.guess_type(str(file))[0] or "application/octet-stream")
+                ctype="application/wasm" if file.suffix.lower()==".wasm" else mimetypes.guess_type(str(file))[0] or "application/octet-stream"
+                return self.response(file.read_bytes(),ctype=ctype,allow_wasm=path in ("/","/index.html"))
             body=self.read_body() if self.command=="POST" else {}
             if self.command=="POST":
                 origin=self.headers.get("Origin")

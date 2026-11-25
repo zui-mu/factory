@@ -113,12 +113,37 @@ class LiveLineTests(unittest.TestCase):
         self.assertEqual(device_freshness([dict(d,temperature=None)],self.clock)[0]['display_status'],'未采集')
         self.assertEqual(device_freshness([dict(d,archived=True)],self.clock)[0]['display_status'],'历史档案')
 
+    def test_live_reads_canonical_order_even_when_device_reading_is_stale(self):
+        did=self.run['device_id'];oid=self.run['order_id']
+        fresh=snapshot(self.c,1,did)
+        self.assertTrue(fresh['device']['fresh'])
+        self.assertEqual(fresh['demo']['order']['id'],oid)
+        self.c.execute("UPDATE devices SET updated_at='2000-01-01T00:00:00' WHERE id=?",(did,))
+        stale=snapshot(self.c,1,did)
+        self.assertFalse(stale['device']['fresh'])
+        self.assertEqual(stale['device']['display_status'],'通信未知')
+        self.assertEqual(stale['demo']['order'],fresh['demo']['order'])
+        self.c.execute('UPDATE orders SET factory_id=2 WHERE id=?',(oid,))
+        self.assertIsNone(snapshot(self.c,1,did)['demo']['order'])
+
     def prepare_defense(self):
         self.action('stop')
         self.c.execute("INSERT INTO users(id,username,password,name,role,factory_id) VALUES(2,'operator','test','操作员','operator',1)")
         self.c.execute("""INSERT INTO staff_employees(factory_id,user_id,code,name,workshop,position,team,skills,created_at)
                           VALUES(1,2,'OP-2','操作员','车间','设备操作岗','生产组','[\"设备点检\"]',?)""",(self.clock.isoformat(),))
         self.run=control(self.c,self.user,1,'prepare-defense',self.clock)
+
+    def test_targeted_fault_cannot_restart_same_run_during_cooling(self):
+        self.prepare_defense()
+        self.until(lambda:self.state()['phase']=='producing')
+        run_id=self.run['id']
+        control(self.c,self.user,1,'fault',self.clock,intended_run_id=run_id)
+        self.action('recover')
+        self.assertEqual(self.state()['phase'],'cooling')
+        with self.assertRaises(ApiError) as caught:
+            control(self.c,self.user,1,'fault',self.clock,intended_run_id=run_id)
+        self.assertEqual(caught.exception.status,409)
+        self.assertEqual(self.state()['phase'],'cooling')
 
     def test_defense_timeline_checks_exact_report_material_and_sample_windows(self):
         self.prepare_defense()

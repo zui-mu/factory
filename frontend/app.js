@@ -3,17 +3,19 @@ import {mountLivePage,morph} from './live-ui.js';
 import {esc,fmt,pct,date,icon,badge,btn,empty,notice,field,select,scene,chartLine,table} from './ui.js';
 import {navItems,renderPage} from './pages.js';
 import {mountMonitor,mountAssistant} from './experience.js';
+import {mountWorkshop3D} from './workshop-3d.js';
 const S={user:null,csrf:'',factory:1,page:'overview',meta:null,cache:{},anomaly:null,render:0,poll:null};
 const root=document.getElementById('app');
 let toastTimer,disposePage=()=>{};const pendingRequests=new Set();let sessionEpoch=0;
 function toast(message,error=false){const el=document.getElementById('toast');el.textContent=message;el.className='visible'+(error?' error':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.className='',4500)}
 async function api(path,body,options={}){
  const epoch=sessionEpoch,controller=new AbortController();pendingRequests.add(controller);
+ const timeout=options.timeout?setTimeout(()=>controller.abort(),options.timeout):null;
  let response;
  try{response=await fetch('/api'+path,{method:body===undefined?'GET':'POST',credentials:'same-origin',signal:controller.signal,
   headers:{'Content-Type':'application/json','X-CSRF-Token':S.csrf,...(body!==undefined?{'Idempotency-Key':options.key||(crypto.randomUUID?crypto.randomUUID():Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join(''))}:{} )},
   ...(body!==undefined?{body:JSON.stringify(body)}:{})});}
- finally{pendingRequests.delete(controller)}
+ finally{clearTimeout(timeout);pendingRequests.delete(controller)}
  const data=await response.json();
  if(epoch!==sessionEpoch)throw new Error('登录状态已改变，请重新操作');
  if(!response.ok){
@@ -60,7 +62,7 @@ async function shell(){
  S.meta=await api('/meta?factory_id='+S.factory);
  const roleLabel={admin:'平台管理员',engineer:'质量工程师',operator:'现场班组长',manager:'生产负责人'};
  root.innerHTML='<aside class="sidebar"><a class="brand" href="#overview"><img src="/logo.svg" alt=""><div><strong>全景可视化数字工厂</strong><small>DIGITAL FACTORY</small></div></a><nav class="nav">'+navItems.map(([id,title,ic,group])=>(group?'<div class="nav-label">'+group+'</div>':'')+'<a href="#'+id+'" data-page="'+id+'">'+icon(ic)+'<span>'+title+'</span></a>').join('')+'</nav><div class="sidebar-bottom"><div class="row"><div class="avatar">'+esc(S.user.name[0])+'</div><div><strong style="font-size:12px">'+esc(S.user.name)+'</strong><small class="muted" style="display:block;font-size:10px">'+roleLabel[S.user.role]+'</small></div><button class="icon-btn" data-action="logout" title="退出登录" aria-label="退出登录" style="margin-left:auto">'+icon('logout')+'</button></div><div class="side-version">智慧工厂平台 <span style="float:right">v1.5.0</span></div></div></aside><div class="shell"><header class="topbar"><div class="breadcrumb"><button class="icon-btn mobile-menu" data-action="menu" aria-label="打开菜单">'+icon('menu')+'</button><span>智慧工厂</span><span>/</span><strong id="crumb">运营总览</strong></div><div class="top-actions"><span class="date muted tiny">'+new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'})+'</span><span class="chip demo-tag">演示环境 · 数据可追溯</span><select id="factory-select" aria-label="选择工厂">'+S.meta.factories.map(f=>'<option value="'+f.id+'" '+(f.id===S.factory?'selected':'')+'>'+esc(f.name)+'</option>').join('')+'</select><button class="icon-btn" data-action="go" data-page="analysis" title="异常工作台" aria-label="异常工作台">'+icon('bell')+'</button><button class="icon-btn logout-label" data-action="logout" aria-label="退出登录">'+icon('logout')+'<span>退出登录</span></button></div></header><main class="main"><div id="page"></div><footer class="footer"><span>全景可视化数字工厂 · 从车间感知到生产决策</span><span>数据驱动洞察，协同连接行动。</span></footer></main></div><nav class="bottom-nav">'+[['overview','总览','home'],['monitor','监控','device'],['tasks','现场作业','tasks'],['assistant','AI 问答','cause'],['federation','联邦','network']].map(([id,label,ic])=>'<a href="#'+id+'" data-page="'+id+'">'+icon(ic)+label+'</a>').join('')+'</nav>';
- document.getElementById('factory-select').addEventListener('change',async e=>{S.factory=Number(e.target.value);S.workforceLine='';S.cache={};S.anomaly=null;S.meta=await api('/meta?factory_id='+S.factory);await render()});
+ document.getElementById('factory-select').addEventListener('change',async e=>{if(S.page==='workshop')disposePage();S.factory=Number(e.target.value);S.workforceLine='';S.cache={};S.anomaly=null;S.meta=await api('/meta?factory_id='+S.factory);await render()});
  const initial=location.hash.slice(1);
  S.page=navItems.some(n=>n[0]===initial)?initial:S.user.role==='operator'?'tasks':'overview';
  if(initial!==S.page)history.replaceState(null,'','#'+S.page);
@@ -83,6 +85,10 @@ async function render(quiet=false){
   if(S.user.role==='operator')container.querySelectorAll('[data-action="new-order"],[data-action="order-state"],[data-action="run-analysis"],[data-action="inspection-task"],[data-action="import-samples"],[data-action="compare-plan"]').forEach(el=>el.remove());
   document.getElementById('search')?.addEventListener('input',e=>{const v=e.target.value.toLowerCase();container.querySelectorAll('[data-search]').forEach(r=>r.hidden=!r.dataset.search.toLowerCase().includes(v))});
   if(!['monitor','assistant'].includes(S.page))disposePage=mountLivePage(S,api,renderPage,()=>{const search=document.getElementById('search');if(search){const value=search.value.toLowerCase();container.querySelectorAll('[data-search]').forEach(r=>r.hidden=!r.dataset.search.toLowerCase().includes(value))}if(S.user.role==='operator')container.querySelectorAll('[data-action=\"new-order\"],[data-action=\"order-state\"],[data-action=\"run-analysis\"],[data-action=\"inspection-task\"],[data-action=\"import-samples\"],[data-action=\"compare-plan\"]').forEach(el=>el.remove())});
+  if(S.page==='workshop'){
+   const stopLive=disposePage,stopWorkshop=mountWorkshop3D(container,S.factory,S.user.role,api);
+   disposePage=()=>{stopWorkshop();stopLive()};
+  }
 
  }catch(err){if(current===S.render&&S.user)container.innerHTML=notice(err.message,true)+'<div class="mt16">'+btn('重新加载','refresh')+'</div>'}
 }

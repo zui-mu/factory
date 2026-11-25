@@ -11,7 +11,7 @@ namespace Zhiyin.FactoryTwin
         void Update()
         {
             var app = FactoryTwinApp.Instance;
-            if (app == null || (!app.Connected && !app.simulation.playing) || !app.simulation.lines[lineIndex].running || actuator == null) return;
+            if (app == null || actuator == null || !app.ShouldAnimate(lineIndex)) return;
             actuator.localPosition = origin + (conveyor ? Vector3.right * Mathf.Repeat(Time.time * 1.8f, 7) : Vector3.up * Mathf.Sin(Time.time * 2) * .55f);
         }
     }

@@ -153,9 +153,9 @@ def dispatch(method,path,p,b,user,federation):
             else:role(user,'engineer','manager')
             f=scope(user,b.get('factory_id')) or 1
             if action not in ('prepare-defense','start','stop','fault','recover','resume','short-stop','changeover')+WAREHOUSE_ACTIONS:raise ApiError('不支持的演示操作')
-            if action in WAREHOUSE_ACTIONS:
-                return control(c,user,f,action,intended_run_id=number(b,'run_id',1,2147483647,True))
-            return control(c,user,f,action)
+            validate_run=action in WAREHOUSE_ACTIONS or (action in ('fault','recover','resume','stop') and 'run_id' in b)
+            intended_run_id=number(b,'run_id',1,2147483647,True) if validate_run else None
+            return control(c,user,f,action,intended_run_id=intended_run_id)
         if path=="/api/password":
             old=required(b,"old_password");new=required(b,"new_password")
             u=one(c,"SELECT * FROM users WHERE id=?",(user["id"],))
