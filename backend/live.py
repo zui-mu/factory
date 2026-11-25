@@ -9,6 +9,9 @@ LABEL='动态演示产线（模拟）'
 DEFENSE_LABEL='答辩演示产线（模拟）'
 DEFENSE_FACTORY=1
 DEFENSE_DEVICE=3
+WAREHOUSE_LOCATION='模拟库位 A-01'
+WAREHOUSE_REFILL=.6
+WAREHOUSE_ACTIONS=('warehouse-shortage','warehouse-refill')
 INTERVAL=3
 PROFILES={
  1:dict(name='精密外壳成型',temperature=72.,pressure=5.2,vibration=.72,cycle=6.8,usage=.04,risk=.018),
@@ -26,7 +29,7 @@ def initial_state(run,stamp):
 def state_of(run):
     s=initial_state(run,run['updated_at']);s.update(json.loads(run.get('state') or '{}'));return s
 
-def describe(record):
+def describe(record,c=None):
     if not record:return None
     result={k:v for k,v in record.items() if k not in ('user_id','state')};s=state_of(record)
     result.update(phase=s['phase'],phase_label=PHASES[s['phase']],profile=PROFILES[record['factory_id']],
@@ -37,6 +40,7 @@ def describe(record):
     defense=s.get('defense')
     if defense:
         result.update(mode='defense',staffing=defense['staffing'],reused_device=defense['reused_device'])
+        if c is not None:result['warehouse']=warehouse_status(c,record,defense)
     return result
 
 def annotate(c,entity,records):
@@ -48,6 +52,10 @@ def annotate(c,entity,records):
     column={'devices':'device_id','orders':'order_id','materials':'material_id','quality':'order_id'}.get(entity)
     runs=rows(c,'SELECT '+column+',running,state FROM demo_runs ORDER BY id') if column else []
     demo={r[column]:r for r in runs}
+    if entity=='materials':
+        for run in runs:
+            warehouse=json.loads(run['state']).get('defense',{}).get('warehouse')
+            if warehouse:demo[warehouse['material_id']]=run
     for r in records:
         run=demo.get(r['order_id'] if entity=='quality' else r['id'])
         if not run:continue
@@ -56,6 +64,7 @@ def annotate(c,entity,records):
             last=one(c,'SELECT id FROM readings WHERE device_id=? ORDER BY id DESC LIMIT 1',(r['id'],))
             if not last or last['id']!=defense.get('last_reading_id'):continue
         r['source']=DEFENSE_LABEL if defense else LABEL;r['simulated']=True
+        if entity=='materials' and defense:r['defense_managed']=True
     return device_freshness(records) if entity=='devices' else records
 
 def current_run(c,factory):
@@ -87,7 +96,7 @@ def snapshot(c,f,device_id=None):
     production=rows(c,"SELECT substr(p.created_at,1,16) `minute`,sum(p.quantity) quantity FROM production_reports p JOIN orders o ON o.id=p.order_id WHERE o.factory_id=? AND p.created_at>=? GROUP BY `minute`",(f,minutes[0]))
     minute_lookup={r['minute']:r['quantity'] for r in production}
     inspection=rows(c,'SELECT batch,sample_size,defects,created_at FROM quality WHERE order_id=? AND inspector=? ORDER BY id DESC LIMIT 8',(run['order_id'],'演示在线检测'))[::-1] if run else []
-    return {'server_time':current.isoformat(timespec='seconds'),'demo':describe(run),'device':device,'readings':history,'recent_readings':recent,
+    return {'server_time':current.isoformat(timespec='seconds'),'demo':describe(run,c),'device':device,'readings':history,'recent_readings':recent,
       'window_start':start,'minute_output':[{'time':m,'quantity':minute_lookup.get(m,0),'partial':i==14} for i,m in enumerate(minutes)],
       'inspections':inspection,'hourly':[{'hour':h[11:]+':00','quantity':lookup.get(h,0)} for h in hours],
       'events':rows(c,"SELECT id,action,entity,user_name,created_at FROM audit WHERE factory_id=? AND action NOT IN ('登录','退出登录','修改密码') ORDER BY id DESC LIMIT 12",(f,)),
@@ -188,7 +197,9 @@ def create_run(c,user,f,stamp,mode=None):
     if defense:
         from .workforce import prepare_defense_staffing
         staffing=prepare_defense_staffing(c,user,f,device['line'],datetime.fromisoformat(stamp))
-        state['defense']={'staffing':staffing,'reused_device':reuse,'prepared_at':stamp,'outputs':[],'interlocks':[]}
+        line=one(c,'SELECT * FROM materials WHERE id=? AND factory_id=?',(mid,f))
+        state['defense']={'staffing':staffing,'reused_device':reuse,'prepared_at':stamp,'outputs':[],'interlocks':[],
+                          'warehouse':create_warehouse(c,line)}
     save(c,run,state,stamp,reason='预热至稳定窗口后开始生产')
     return run
 
@@ -214,6 +225,71 @@ def defense_owns_device(c,device_id,order_id):
     return bool(run and json.loads(run['state']).get('defense'))
 
 
+def defense_owns_material(c,material):
+    return bool(one(c,"""SELECT 1 FROM demo_runs WHERE factory_id=? AND JSON_EXTRACT(state,'$.defense') IS NOT NULL
+                         AND (material_id=? OR JSON_EXTRACT(state,'$.defense.warehouse.material_id')=?) LIMIT 1""",
+                    (material['factory_id'],material['id'],material['id'])))
+
+
+def create_warehouse(c,line):
+    material_id=c.execute('INSERT INTO materials(factory_id,code,name,spec,unit,stock,min_stock,location) VALUES(?,?,?,?,?,0,0,?)',
+                         (line['factory_id'],line['code']+'-A01',line['name'],line['spec'],line['unit'],WAREHOUSE_LOCATION)).lastrowid
+    return {'material_id':material_id,'transfers':[]}
+
+
+def transfer_warehouse_stock(c,user,run,state,action,stamp):
+    from .api import ApiError
+    if not run or not run['running'] or not state.get('defense'):
+        raise ApiError('请先启动答辩演示',409)
+    defense=state['defense'];warehouse=defense.get('warehouse')
+    returning=action=='warehouse-shortage';at=datetime.fromisoformat(stamp)
+    order=one(c,'SELECT code,batch,status FROM orders WHERE id=? AND factory_id=? AND device_id=?',
+              (run['order_id'],run['factory_id'],run['device_id']))
+    if (not order or order['status']!='生产中' or state['resume_required'] or
+            at-datetime.fromisoformat(run['started_at'])>=timedelta(minutes=20)):
+        raise ApiError('工单暂停、故障联锁或演示结束时不能转移演示原料',409)
+    usage=PROFILES[run['factory_id']]['usage']
+    if returning:
+        device=one(c,'SELECT * FROM devices WHERE id=? AND factory_id=?',(run['device_id'],run['factory_id']))
+        if (state['phase']!='producing' or warehouse and warehouse['transfers'] or not device or
+                not device_freshness([dict(device,simulated=True)],at)[0]['fresh'] or
+                abs(device['temperature']-PROFILES[run['factory_id']]['temperature'])>1.5):
+            raise ApiError('仅可在本轮答辩演示稳定生产时模拟一次缺料',409)
+    elif state['phase']!='shortage' or not warehouse or len(warehouse['transfers'])!=1:
+        raise ApiError('请先模拟缺料，再从本轮演示库位补料',409)
+
+    line=one(c,'SELECT * FROM materials WHERE id=? AND factory_id=?',(run['material_id'],run['factory_id']))
+    if not line or (returning and line['stock']<usage) or (not returning and line['stock']>=usage):
+        raise ApiError('当前线边库存不满足该转移条件',409)
+    if warehouse is None:
+        warehouse=defense['warehouse']=create_warehouse(c,line)
+    storage=one(c,'SELECT * FROM materials WHERE id=? AND factory_id=?',(warehouse['material_id'],run['factory_id']))
+    if (not storage or storage['id']==line['id'] or storage['code']!=line['code']+'-A01' or
+            storage['location']!=WAREHOUSE_LOCATION or any(storage[key]!=line[key] for key in ('name','spec','unit'))):
+        raise ApiError('演示线边料与库位原料的关联无效',409)
+    origin,destination=(line,storage) if returning else (storage,line)
+    quantity=origin['stock'] if returning else min(WAREHOUSE_REFILL,origin['stock'])
+    if quantity<usage:raise ApiError('模拟库位可用库存不足以生产一件',409)
+    note='演示移库 · %s / %s · %s → %s'%(order['code'],order['batch'],origin['location'],destination['location'])
+    c.execute('UPDATE materials SET stock=stock-? WHERE id=?',(quantity,origin['id']))
+    c.execute('UPDATE materials SET stock=stock+? WHERE id=?',(quantity,destination['id']))
+    sql='INSERT INTO stock_moves(material_id,direction,quantity,note,user_name,created_at) VALUES(?,?,?,?,?,?)'
+    name=user.get('name',user['username'])
+    out_id=c.execute(sql,(origin['id'],'出库',quantity,note,name,stamp)).lastrowid
+    in_id=c.execute(sql,(destination['id'],'入库',quantity,note,name,stamp)).lastrowid
+    warehouse['transfers'].append({'kind':'return' if returning else 'replenish','batch':order['batch'],
+        'from_location':origin['location'],'to_location':destination['location'],'out_move_id':out_id,'in_move_id':in_id})
+    warehouse['shortage_output_index' if returning else 'refill_output_index']=len(defense['outputs'])
+    if returning:
+        transition(c,run,state,'shortage',stamp)
+        c.execute("UPDATE devices SET status='待机' WHERE id=?",(run['device_id'],))
+    state['last_step']=stamp
+    reason='线边余料已转入模拟库位，生产等待补料' if returning else '模拟库位已补料，等待产线重新达到稳定窗口'
+    save(c,run,state,stamp,reason=reason)
+    audit(c,user,'模拟线边退料' if returning else '模拟库位补料',str(run['id']),note,
+          run['factory_id'],stamp=stamp)
+
+
 def record_equipment_review(c,anomaly,task_id,event_id,passed):
     for run in rows(c,'SELECT * FROM demo_runs WHERE factory_id=? AND device_id=? ORDER BY id DESC',
                     (anomaly['factory_id'],anomaly['device_id'])):
@@ -234,6 +310,45 @@ def output_window(links,reports,moves):
             'first_move_id':move_ids[0] if move_ids else None,'last_move_id':move_ids[-1] if move_ids else None}
 
 
+def warehouse_status(c,run,defense,reports=None,moves=None):
+    warehouse=defense.get('warehouse',{});storage_id=warehouse.get('material_id')
+    stock={m['id']:m for m in rows(c,'SELECT id,name,unit,stock,location FROM materials WHERE factory_id=? AND id IN (?,?)',
+                                  (run['factory_id'],run['material_id'],storage_id))}
+    line=stock[run['material_id']];storage=stock.get(storage_id)
+    available=storage['stock'] if storage else 0
+    transfers=[]
+    for link in warehouse.get('transfers',[]):
+        source,destination=(line,storage) if link['kind']=='return' else (storage,line)
+        if not source or not destination:continue
+        pair=one(c,"""SELECT o.quantity,o.created_at at FROM stock_moves o JOIN stock_moves i ON i.id=?
+                      WHERE o.id=? AND o.material_id=? AND i.material_id=? AND o.direction='出库' AND i.direction='入库'
+                      AND o.quantity=i.quantity AND o.created_at=i.created_at""",
+                 (link['in_move_id'],link['out_move_id'],source['id'],destination['id']))
+        if pair:transfers.append(dict(link,**pair))
+
+    start=warehouse.get('shortage_output_index');refill=warehouse.get('refill_output_index')
+    links=defense['outputs'];hold=None;recovery=output_window([],{},{});recovery['first_report_at']=None
+    if start is not None:
+        if reports is None:
+            reports={r['id']:r for r in rows(c,'SELECT id,quantity,created_at FROM production_reports WHERE order_id=?',(run['order_id'],))}
+        if moves is None:
+            moves={m['id']:m for m in rows(c,"SELECT id,quantity FROM stock_moves WHERE material_id=? AND direction='出库'",(line['id'],))}
+        hold=output_window(links[start:refill],reports,moves)
+        completed=output_window(links[:start],reports,moves)['output_count']
+        hold.update(completed_before=completed,completed_after=completed+hold['output_count'])
+        if refill is not None:
+            recovery=output_window(links[refill:],reports,moves)
+            first_report=reports.get(recovery['first_report_id'])
+            recovery['first_report_at']=first_report['created_at'] if first_report else None
+    stage='ready' if start is None else 'shortage' if refill is None else 'resumed' if recovery['report_count'] else 'refilled'
+    refill_quantity=next((t['quantity'] for t in transfers if t['kind']=='replenish'),
+                         WAREHOUSE_REFILL if start is None else min(WAREHOUSE_REFILL,available))
+    return {'stage':stage,'location':WAREHOUSE_LOCATION,'line_location':line['location'],
+            'material_name':line['name'],'unit':line['unit'],'available_quantity':available,'line_quantity':line['stock'],
+            'refill_quantity':refill_quantity,'warehouse_material_id':storage_id,'line_material_id':line['id'],
+            'transfers':transfers,'hold':hold,'recovery':recovery}
+
+
 def timeline(c,f,run_id):
     from .api import ApiError
     run=one(c,'SELECT * FROM demo_runs WHERE factory_id=? AND id=?',(f,run_id))
@@ -242,11 +357,11 @@ def timeline(c,f,run_id):
     device=one(c,'SELECT id,code,name,line FROM devices WHERE factory_id=? AND id=?',(f,run['device_id']))
     order=one(c,'SELECT id,code,batch,completed,quantity,status FROM orders WHERE factory_id=? AND id=? AND device_id=?',(f,run['order_id'],run['device_id']))
     material=one(c,'SELECT id,code,name,unit,stock FROM materials WHERE factory_id=? AND id=?',(f,run['material_id']))
-    reports={r['id']:r for r in rows(c,'SELECT id,quantity FROM production_reports WHERE order_id=?',(run['order_id'],))}
+    reports={r['id']:r for r in rows(c,'SELECT id,quantity,created_at FROM production_reports WHERE order_id=?',(run['order_id'],))}
     moves={m['id']:m for m in rows(c,"SELECT id,quantity FROM stock_moves WHERE material_id=? AND direction='出库'",(run['material_id'],))}
     checks={q['id']:q for q in rows(c,'SELECT id,batch,sample_size,defects,created_at FROM quality WHERE order_id=? AND factory_id=?',(run['order_id'],f))}
     events=rows(c,"""SELECT id,'process' type,created_at at,action label,user_name actor FROM audit WHERE factory_id=? AND entity=?
-                  AND (action LIKE '演示工况 · %' OR action IN ('准备答辩演示','启动动态演示','停止动态演示','模拟温控故障','开始降温观察','确认演示复产','模拟短暂停机','模拟换料','采集间隔中断'))""",(f,str(run_id)))
+                  AND (action LIKE '演示工况 · %' OR action IN ('准备答辩演示','启动动态演示','停止动态演示','模拟温控故障','开始降温观察','确认演示复产','模拟短暂停机','模拟换料','采集间隔中断','模拟线边退料','模拟库位补料'))""",(f,str(run_id)))
     interlocks=[]
     for incident in defense.get('interlocks',[]):
         anomaly=one(c,'SELECT id,title,status,source,created_at FROM anomalies WHERE id=? AND factory_id=? AND device_id=? AND order_id IS NULL',(incident['anomaly_id'],f,run['device_id']))
@@ -272,23 +387,30 @@ def timeline(c,f,run_id):
           'resume_at':incident.get('resume_at'),'resume_event_id':incident.get('resume_event_id'),
           'anomaly':anomaly,'task':task,'inspection':inspection,'shutdown':shutdown,'restart':restart})
     events.sort(key=lambda e:(e['at'],e['type'],e['id']))
-    return {'run_id':run_id,'factory_id':f,'source_type':'simulation','source':DEFENSE_LABEL if defense else LABEL,
+    result={'run_id':run_id,'factory_id':f,'source_type':'simulation','source':DEFENSE_LABEL if defense else LABEL,
             'device':device,'order':order,'material':material,'staffing':defense.get('staffing'),
             'phase':state['phase'],'running':bool(run['running']),'interlocks':interlocks,'events':events}
+    if defense:result['warehouse']=warehouse_status(c,run,defense,reports,moves)
+    return result
 
-def control(c,user,f,action,moment=None):
+def control(c,user,f,action,moment=None,*,intended_run_id=None):
     from .api import ApiError,role
     stamp=(moment or datetime.now()).isoformat(timespec='seconds')
     run=current_run(c,f)
     defense=state_of(run).get('defense') if run else None
-    if action=='prepare-defense' or (defense and action!='start'):role(user,'engineer')
+    if action=='prepare-defense' or action in WAREHOUSE_ACTIONS or (defense and action!='start'):role(user,'engineer')
+    if action in WAREHOUSE_ACTIONS:
+        if intended_run_id is not None and (not run or run['id']!=intended_run_id):
+            raise ApiError('演示轮次已切换，请刷新工况后重试',409)
+        transfer_warehouse_stock(c,user,run,state_of(run) if run else {},action,stamp)
+        return describe(one(c,'SELECT * FROM demo_runs WHERE id=?',(run['id'],)),c)
     if action=='prepare-defense':
         if f!=DEFENSE_FACTORY:raise ApiError('答辩演示在星铸工厂提供',409)
         if run and run['running']:
             if not defense:raise ApiError('请先停止当前动态演示，再准备答辩演示',409)
             incident=latest_interlock({'defense':defense})
             closed=incident and incident.get('resume_at') and incident['quality_ids'] and one(c,"SELECT id FROM anomalies WHERE id=? AND status='已关闭'",(incident['anomaly_id'],))
-            if not closed:return describe(run)
+            if not closed:return describe(run,c)
             stop_run(c,run,stamp,'本轮答辩演示已经结束，开始新一轮演示')
         run=create_run(c,user,f,stamp,'defense')
     elif action=='start':
@@ -306,8 +428,13 @@ def control(c,user,f,action,moment=None):
         if not defense or run['running']:stop_run(c,run,stamp,'人工停止演示')
     elif run and run['running']:
         s=state_of(run);phase=s['phase']
-        if defense and action in ('short-stop','changeover'):raise ApiError('答辩演示使用固定批次，仅支持温控联锁流程',409)
+        if defense and action in ('short-stop','changeover'):raise ApiError('答辩演示使用固定批次，无法手动短停或换料',409)
         if action=='fault':
+            warehouse=defense.get('warehouse',{}) if defense else {}
+            if 'shortage_output_index' in warehouse:
+                refill=warehouse.get('refill_output_index')
+                if refill is None or (phase!='producing' and len(defense['outputs'])==refill):
+                    raise ApiError('请等待模拟补料后恢复生产，再触发温控故障',409)
             latch_fault(c,run,s,stamp)
         elif action=='recover' and phase=='fault':transition(c,run,s,'cooling',stamp)
         elif action=='resume' and phase=='awaiting_resume':
@@ -329,7 +456,7 @@ def control(c,user,f,action,moment=None):
     titles={'prepare-defense':'准备答辩演示','start':'启动动态演示','stop':'停止动态演示','fault':'模拟温控故障','recover':'开始降温观察','resume':'确认演示复产','short-stop':'模拟短暂停机','changeover':'模拟换料'}
     if action!='resume' or not defense:
         audit(c,user,titles[action],str(run['id']),DEFENSE_LABEL if defense or action=='prepare-defense' else LABEL,f,stamp=stamp)
-    return describe(one(c,'SELECT * FROM demo_runs WHERE id=?',(run['id'],)))
+    return describe(one(c,'SELECT * FROM demo_runs WHERE id=?',(run['id'],)),c)
 
 def approach(previous,target,speed,dt):return previous+max(-speed*dt,min(speed*dt,target-previous))
 

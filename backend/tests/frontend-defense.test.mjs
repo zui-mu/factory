@@ -62,3 +62,41 @@ test('keeps not yet collected evidence distinct from a recorded zero', () => {
   assert.match(result, /待确认复产/);
   assert.doesNotMatch(result, /0 件|0 kg/);
 });
+
+test('shows paired warehouse movements and the same batch production report', () => {
+  const result = component.renderDefenseRecord({
+    order: {batch: 'SIM-01-0042-B01'},
+    warehouse: {
+      stage: 'resumed', location: '模拟库位 A-01', line_location: '演示线料仓',
+      material_name: '演示 PA66 原料', unit: 'kg', available_quantity: 5.32, line_quantity: 0.56,
+      transfers: [
+        {kind: 'return', quantity: 5.92, batch: 'SIM-01-0042-B01', from_location: '演示线料仓',
+          to_location: '模拟库位 A-01', out_move_id: 40, in_move_id: 41, at: '2026-11-25T10:11:12'},
+        {kind: 'replenish', quantity: 0.6, batch: 'SIM-01-0042-B01', from_location: '模拟库位 A-01',
+          to_location: '演示线料仓', out_move_id: 42, in_move_id: 43, at: '2026-11-25T10:12:13'},
+      ],
+      hold: {report_count: 0, output_count: 0, consumed_quantity: 0, completed_before: 2, completed_after: 2},
+      recovery: {report_count: 1, output_count: 1, first_report_id: 81, first_report_at: '2026-11-25T10:13:41'},
+    },
+  });
+  assert.match(result, /库位补料[\s\S]*5\.32 kg[\s\S]*0\.56 kg/);
+  assert.match(result, /缺料期间报工 0 件 · 耗料 0 kg/);
+  assert.match(result, /演示线料仓 → 模拟库位 A-01[\s\S]*5\.92 kg[\s\S]*出库 #40 · 入库 #41/);
+  assert.match(result, /模拟库位 A-01 → 演示线料仓[\s\S]*0\.6 kg[\s\S]*出库 #42 · 入库 #43/);
+  assert.match(result, /SIM-01-0042-B01[\s\S]*首条报工 #81[\s\S]*10:13:41/);
+});
+
+test('shows real zero inventory and waits for evidence after a refill', () => {
+  const warehouse = {
+    stage: 'shortage', location: '模拟库位 A-01', line_location: '演示线料仓',
+    material_name: '演示 PA66 原料', unit: 'kg', line_quantity: 0, available_quantity: 5.92,
+    recovery: {output_count: 0},
+  };
+  const summary = component.renderWarehouseSummary(warehouse);
+  assert.match(summary, /缺料停产[\s\S]*演示线料仓[\s\S]*0 kg/);
+  assert.doesNotMatch(component.renderDefenseRecord({warehouse}), /补料后累计报工<\/dt><dd>0 件/);
+  const result = component.renderDefenseRecord({warehouse: {...warehouse, stage: 'refilled', line_quantity: 0.6}});
+  assert.match(result, /已补料，等待报工/);
+  assert.match(result, /补料后累计报工<\/dt><dd>0 件/);
+  assert.doesNotMatch(result, /首条报工 #|已恢复生产/);
+});

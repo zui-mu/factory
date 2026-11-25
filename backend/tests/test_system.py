@@ -343,4 +343,35 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(action('stop')[0],200)
         self.assertEqual(self.eng.call('/live?factory_id=1')[1]['demo']['id'],regular['id'])
 
+    def test_20_warehouse_controls_require_defense_and_protect_reserved_stock(self):
+        def action(name,client=self.eng,**fields):
+            return client.call('/live/demo',{'factory_id':1,'action':name,**fields})
+        manager=Client(self.base,'manager')
+        self.assertEqual(action('warehouse-shortage',manager)[0],403)
+        self.assertEqual(action('warehouse-refill',self.op)[0],403)
+        self.assertEqual(action('warehouse-refill',self.other)[0],403)
+        code,ordinary=action('start')
+        self.assertEqual(code,200,ordinary)
+        self.assertNotIn('warehouse',ordinary)
+        self.assertEqual(action('warehouse-shortage',run_id=ordinary['id'])[0],409)
+        self.assertEqual(action('stop')[0],200)
+        code,run=action('prepare-defense')
+        self.assertEqual(code,200,run)
+        warehouse=run['warehouse']
+        self.assertEqual(warehouse['available_quantity'],0)
+        _,materials=self.eng.call('/materials?factory_id=1')
+        row=next(m for m in materials if m['id']==warehouse['warehouse_material_id'])
+        self.assertTrue(row['simulated'])
+        self.assertTrue(row['defense_managed'])
+        self.assertTrue(next(m for m in materials if m['id']==run['material_id'])['defense_managed'])
+        self.assertNotIn('defense_managed',next(m for m in materials if m['id']==ordinary['material_id']))
+        payload={'direction':'入库','quantity':1,'note':'测试直接写入'}
+        for material_id in (run['material_id'],warehouse['warehouse_material_id']):
+            self.assertEqual(self.eng.call('/materials/'+str(material_id),payload)[0],409)
+        self.assertEqual(self.eng.call('/live?factory_id=1')[1]['demo']['warehouse']['stage'],'ready')
+        self.assertEqual(action('warehouse-refill')[0],400)
+        self.assertEqual(action('warehouse-refill',run_id=ordinary['id'])[0],409)
+        self.assertEqual(action('warehouse-refill',run_id=run['id'])[0],409)
+        self.assertEqual(action('stop')[0],200)
+
 if __name__=="__main__":unittest.main(verbosity=2)

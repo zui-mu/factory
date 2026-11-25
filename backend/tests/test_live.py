@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """Process invariants exercised with an injected clock, without touching user data."""
-import unittest
+import json,unittest
 from datetime import datetime,timedelta
 from pathlib import Path
 from backend.db import SCHEMA,one,rows,connect
 from mysql_support import TestDatabases
-from backend.live import control,advance,describe,annotate,timeline,PROFILES
+from backend.live import control,advance,describe,annotate,snapshot,timeline,PROFILES
 from backend.telemetry import device_freshness
 from backend.api import ApiError
 
@@ -181,5 +181,84 @@ class LiveLineTests(unittest.TestCase):
         self.assertEqual(len(timeline(self.c,1,before['run_id'])['interlocks']),1)
         self.assertEqual(self.order()['completed'],0)
         self.until(lambda:self.order()['completed']==1)
+
+    def test_warehouse_transfer_pauses_real_output_and_replenishes_same_batch(self):
+        self.prepare_defense()
+        with self.assertRaises(ApiError):self.action('warehouse-refill')
+        self.until(lambda:self.order()['completed']==2)
+        self.action('fault');self.action('recover')
+        self.until(lambda:self.state()['phase']=='awaiting_resume');self.action('resume')
+        self.until(lambda:self.order()['completed']>=5)
+        batch=self.order()['batch'];qty=self.order()['completed'];stock=self.stock()
+        before=self.total('stock_moves','1')
+        with self.assertRaisesRegex(ApiError,'轮次已切换'):
+            control(self.c,self.user,1,'warehouse-shortage',self.clock,intended_run_id=self.run['id']+1)
+        staged=self.action('warehouse-shortage')['warehouse']
+        self.assertEqual(self.state()['phase'],'shortage')
+        self.assertEqual(staged['stage'],'shortage')
+        self.assertEqual(staged['line_quantity'],0)
+        self.assertAlmostEqual(staged['available_quantity'],stock)
+        self.assertEqual(staged['hold']['completed_before'],qty)
+        self.assertEqual(staged['hold']['completed_after'],qty)
+        self.assertEqual(self.total('stock_moves','1'),before+2)
+        with self.assertRaises(ApiError):self.action('warehouse-shortage')
+        self.tick(8)
+        self.assertEqual(self.order()['completed'],qty)
+        self.assertEqual(self.total('stock_moves','1'),before+2)
+        with self.assertRaises(ApiError):self.action('fault')
+        self.c.execute('UPDATE devices SET temperature=97 WHERE id=?',(self.run['device_id'],))
+        self.tick()
+        self.assertEqual(self.state()['phase'],'fault')
+        with self.assertRaises(ApiError):self.action('warehouse-refill')
+        self.assertEqual(self.total('stock_moves','1'),before+2)
+        self.action('recover');self.until(lambda:self.state()['phase']=='awaiting_resume');self.action('resume')
+        self.tick()
+
+        refilled=self.action('warehouse-refill')['warehouse']
+        self.assertEqual(refilled['stage'],'refilled')
+        self.assertEqual(refilled['line_quantity'],.6)
+        self.assertAlmostEqual(refilled['available_quantity']+refilled['line_quantity'],stock)
+        self.assertEqual(refilled['recovery']['report_count'],0)
+        self.assertEqual(self.total('stock_moves','1'),before+4)
+        with self.assertRaises(ApiError):self.action('warehouse-refill')
+        for move,source,dest,quantity in (
+                (refilled['transfers'][0],self.run['material_id'],refilled['warehouse_material_id'],stock),
+                (refilled['transfers'][1],refilled['warehouse_material_id'],self.run['material_id'],.6)):
+            out=self.c.execute('SELECT * FROM stock_moves WHERE id=?',(move['out_move_id'],)).fetchone()
+            incoming=self.c.execute('SELECT * FROM stock_moves WHERE id=?',(move['in_move_id'],)).fetchone()
+            self.assertEqual((out['material_id'],out['direction'],out['quantity']),(source,'出库',quantity))
+            self.assertEqual((incoming['material_id'],incoming['direction'],incoming['quantity']),(dest,'入库',quantity))
+            self.assertIn(batch,out['note']);self.assertIn(batch,incoming['note'])
+
+        self.until(lambda:self.order()['completed']>qty)
+        record=timeline(self.c,1,self.run['id'])
+        self.assertEqual(record['order']['batch'],batch)
+        self.assertEqual(record['device']['id'],self.run['device_id'])
+        self.assertEqual(record['order']['id'],self.run['order_id'])
+        self.assertEqual(record['warehouse']['stage'],'resumed')
+        self.assertEqual(record['warehouse']['hold']['report_count'],0)
+        self.assertEqual(record['warehouse']['hold']['consumed_quantity'],0)
+        self.assertEqual(record['warehouse']['recovery']['report_count'],1)
+        report_id=record['warehouse']['recovery']['first_report_id']
+        self.assertEqual(one(self.c,'SELECT order_id FROM production_reports WHERE id=?',(report_id,))['order_id'],self.run['order_id'])
+
+    def test_retained_defense_only_creates_warehouse_when_staging(self):
+        self.prepare_defense()
+        state=json.loads(self.record()['state'])
+        storage_id=state['defense'].pop('warehouse')['material_id']
+        self.c.execute('DELETE FROM materials WHERE id=?',(storage_id,))
+        self.c.execute('UPDATE demo_runs SET state=? WHERE id=?',(json.dumps(state),self.run['id']))
+        material_count=self.total('materials','1')
+        ready=snapshot(self.c,1)['demo']['warehouse']
+        self.assertEqual(ready['stage'],'ready')
+        self.assertIsNone(ready['warehouse_material_id'])
+        self.assertEqual(self.total('materials','1'),material_count)
+        self.until(lambda:self.state()['phase']=='producing')
+        self.assertIsNotNone(self.action('warehouse-shortage')['warehouse']['warehouse_material_id'])
+        self.assertEqual(self.total('materials','1'),material_count+1)
+        move_count=self.total('stock_moves','1')
+        with self.assertRaises(ApiError):
+            control(self.c,self.user,1,'warehouse-refill',self.clock+timedelta(minutes=20))
+        self.assertEqual(self.total('stock_moves','1'),move_count)
 
 if __name__=='__main__':unittest.main()

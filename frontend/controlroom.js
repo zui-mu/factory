@@ -1,7 +1,7 @@
 import {conditionSummary,processCharts} from './conditions.js';
 import {esc,fmt,pct,icon,btn} from './ui.js';
 import {morph} from './live-ui.js';
-import {renderDefenseRecord} from './defense.js';
+import {renderDefenseRecord,renderWarehouseSummary} from './defense.js';
 const block=(name,title,extra='')=>'<section class="control-panel cp-'+name+'"><div class="cp-head"><h2>'+title+'</h2>'+extra+'</div><div id="monitor-'+name+'" class="cp-body"></div></section>';
 const value=(v,digits=1)=>v==null?'—':Number(v).toFixed(digits);
 const time=s=>s?s.slice(11,19):'未采集';
@@ -34,6 +34,8 @@ export async function renderMonitor(S,api){
  const videos=[['factory.mp4','01','工厂全景'],['liushuixian.mp4','02','生产流水线 A'],['liushuixiantwo.mp4','03','生产流水线 B']];
  return '<div class="monitor-board control-room"><header class="control-heading"><div class="control-brand"><img src="/logo.svg" alt=""><span>全景可视化数字工厂<small>SMART FACTORY</small></span></div><div class="control-title"><h1>生产监控大屏</h1><p>从车间感知到生产决策 · '+esc(S.meta.factories.find(f=>f.id===S.factory)?.name||'智慧工厂')+'</p></div><div class="control-clock"><strong id="monitor-clock">--:--:--</strong><small id="monitor-date"></small></div></header>'+
  '<div class="screen-toolbar"><span class="screen-source" id="monitor-source">采集记录</span><span id="monitor-sync">正在连接</span><div class="screen-actions">'+btn('返回工作台','go','data-page="overview"')+(canPrepareDefense?btn('准备答辩场景','demo-prepare-defense'):'')+(S.user.role!=='operator'?btn('处置记录','monitor-defense-record'):'')+btn('暂停数据刷新','monitor-poll')+btn('全屏大屏','monitor-fullscreen')+'</div></div>'+
+ '<section class="monitor-warehouse" aria-labelledby="monitor-warehouse-title" hidden><h2 id="monitor-warehouse-title">模拟库位补料</h2><div class="warehouse-summary"></div>'+
+ (canPrepareDefense?'<div class="warehouse-actions">'+btn('模拟缺料','demo-warehouse-shortage','disabled')+btn('从 A-01 补料','demo-warehouse-refill','disabled')+'</div><p class="warehouse-error" role="alert" hidden></p>':'')+'</section>'+
  '<div id="monitor-condition"></div><div class="control-grid">'+block('sensors','设备传感器','<select id="monitor-device-select" aria-label="选择监测设备">'+data.ds.map(d=>'<option value="'+d.id+'" '+(d.id===data.l.device?.id?'selected':'')+'>'+esc(d.code)+' · '+esc(d.name)+'</option>').join('')+'</select>' )+block('equipment','设备运行状态','<span>最近采集</span>')+block('alerts','异常与处置','<span>点击追溯 →</span>')+block('stats','生产任务统计')+block('production','生产进度','<span>工单口径</span>')+
  '<section class="control-panel cp-cameras"><div class="cp-head"><h2>操作车间展示</h2>'+btn('暂停全部视频','monitor-videos')+'</div><div class="camera-stage">'+videos.map(([src,id,label],i)=>'<article class="monitor-camera '+(i===0?'camera-main':'')+'" data-camera="'+i+'"><video src="/api/media/'+src+'" autoplay muted loop playsinline preload="metadata" aria-label="'+label+'演示视频"></video><button data-action="camera-select" data-camera="'+i+'"><i></i>CAM '+id+' · '+label+'<em>录制演示</em></button><div class="camera-error" hidden>视频加载失败，请重新登录。</div></article>').join('')+'</div><div class="cp-head events-title"><h2>现场事件流水</h2><span>业务操作自动同步</span></div><div id="monitor-events" class="cp-body"></div></section>'+
 block('trend','工况与产出趋势','<select id="monitor-trend-mode" aria-label="选择趋势指标"><option value="temperature">温度 · 15分钟</option><option value="pressure">压力 · 15分钟</option><option value="vibration">振动 · 15分钟</option><option value="quality">分组检测</option><option value="history">历史汇总</option></select>')+block('orders','生产订单','<span>交期与进度</span>')+block('stock','物料与补料','<span>按物料单位</span>')+'</div>'+
@@ -46,6 +48,11 @@ export function mountMonitor(S,api){
   const recordDialog=board.querySelector('.defense-dialog');
   const recordBody=recordDialog.querySelector('.defense-dialog-body');
   const recordError=recordDialog.querySelector('.defense-error');
+  const warehousePanel=board.querySelector('.monitor-warehouse');
+  const warehouseSummary=warehousePanel.querySelector('.warehouse-summary');
+  const shortageButton=warehousePanel.querySelector('[data-action="demo-warehouse-shortage"]');
+  const refillButton=warehousePanel.querySelector('[data-action="demo-warehouse-refill"]');
+  const warehouseError=warehousePanel.querySelector('.warehouse-error');
   let recordRequest=0;
   const canControlDefense=['admin','engineer'].includes(S.user.role);
   async function refreshRecord(){
@@ -73,6 +80,11 @@ export function mountMonitor(S,api){
   if(selector.dataset.options!==options){selector.innerHTML=options;selector.dataset.options=options}selector.value=String(data.l.device?.id||'');
   const run=data.l.demo,defense=run?.mode==='defense';
   const blocked=demoPending||(defense&&!canControlDefense);
+  const warehouse=run?.warehouse;
+  warehousePanel.hidden=!warehouse;
+  if(warehouse)morph(warehouseSummary,renderWarehouseSummary(warehouse));
+  if(shortageButton)shortageButton.disabled=blocked||!run?.running||run.phase!=='producing'||warehouse?.stage!=='ready';
+  if(refillButton)refillButton.disabled=blocked||!run?.running||run.phase!=='shortage'||warehouse?.stage!=='shortage';
   const prepare=board.querySelector('[data-action="demo-prepare-defense"]');
   if(prepare)prepare.disabled=demoPending;
   const recordButton=board.querySelector('[data-action="monitor-defense-record"]');
@@ -117,10 +129,14 @@ export function mountMonitor(S,api){
    demoPending=true;
    const scenario=board.querySelector('#monitor-scenario');
    const requested=action==='demo-scenario'?scenario.value:action.slice(5);
+   const isWarehouseAction=requested.startsWith('warehouse-');
+   const body={factory_id:factory,action:requested};
+   if(isWarehouseAction)body.run_id=latestData.l.demo?.id;
+   if(warehouseError)warehouseError.hidden=true;
    update(latestData);
    let failure='';
    try{
-    await api('/live/demo',{factory_id:factory,action:requested});
+    await api('/live/demo',body);
     selected=null;
     await refresh();
    }catch(error){failure=error.message}
@@ -129,9 +145,10 @@ export function mountMonitor(S,api){
     if(!disposed){
      update(latestData);
      if(failure){
-      const status=board.querySelector('#monitor-demo-state');
+      const status=isWarehouseAction&&warehouseError?warehouseError:board.querySelector('#monitor-demo-state');
       status.textContent=failure;
       status.setAttribute('role','alert');
+      status.hidden=false;
      }
     }
    }

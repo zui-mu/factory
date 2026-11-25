@@ -81,8 +81,13 @@ async function renderPageContent(page,S,api){
  }
  if(page==='materials'){
   const [materials,moves]=await Promise.all([api('/materials'+query),api('/stock-moves'+query)]);materials.sort((a,b)=>Number(a.archived)-Number(b.archived)||Number(b.fresh)-Number(a.fresh)||a.id-b.id);S.cache.materials=materials;
+  const materialRows=materials.map(m=>{
+   const action=m.archived?'<span class="muted tiny">存档只读</span>':m.defense_managed?'<span class="muted tiny">答辩场景调配</span>':btn('出入库','stock-move','data-id="'+m.id+'"','small');
+   return '<tr data-search="'+esc(m.name+' '+m.code+' '+m.location)+'"><td><strong>'+esc(m.name)+'</strong><small>'+esc(m.code)+'</small><small>'+esc(m.source)+'</small></td><td>'+esc(m.spec)+'</td><td>'+esc(m.location)+'</td><td><strong>'+fmt(m.stock)+'</strong> '+esc(m.unit)+'</td><td>'+fmt(m.min_stock)+' '+esc(m.unit)+'</td><td>'+badge(m.archived?'历史余额':m.stock<m.min_stock?'库存偏低':'库存充足')+'</td><td>'+action+'</td></tr>';
+  }).join('');
+  const moveRows=moves.map(m=>'<tr><td>'+date(m.created_at)+'<small>流水 #'+esc(m.id)+'</small></td><td>'+esc(m.name)+'</td><td>'+badge(m.direction)+'</td><td>'+esc(m.quantity)+' '+esc(m.unit)+'</td><td>'+esc(m.user_name)+'</td><td>'+esc(m.note)+'</td></tr>').join('');
   return pageHead('仓储物料','掌握库存水位，追踪每一笔物料流转。',exportBtn('materials'))+
-   '<div class="stack"><div class="card">'+toolbar('搜索物料、编码或库位')+table(['物料 / 编码','规格','库位','当前库存','安全库存','状态','操作'],materials.map(m=>'<tr data-search="'+esc(m.name+' '+m.code+' '+m.location)+'"><td><strong>'+esc(m.name)+'</strong><small>'+esc(m.code)+'</small><small>'+esc(m.source)+'</small></td><td>'+esc(m.spec)+'</td><td>'+esc(m.location)+'</td><td><strong>'+fmt(m.stock)+'</strong> '+esc(m.unit)+'</td><td>'+fmt(m.min_stock)+' '+esc(m.unit)+'</td><td>'+badge(m.archived?'历史余额':m.stock<m.min_stock?'库存偏低':'库存充足')+'</td><td>'+(m.archived?'<span class="muted tiny">存档只读</span>':btn('出入库','stock-move','data-id="'+m.id+'"','small'))+'</td></tr>').join(''))+'</div><div class="card">'+cardHead('出入库流水','每笔操作保存处理人、数量和业务说明')+(moves.length?table(['时间','物料','方向','数量','操作人','说明'],moves.map(m=>'<tr><td>'+date(m.created_at)+'</td><td>'+esc(m.name)+'</td><td>'+badge(m.direction)+'</td><td>'+m.quantity+' '+esc(m.unit)+'</td><td>'+esc(m.user_name)+'</td><td>'+esc(m.note)+'</td></tr>').join('')):empty('尚无出入库操作'))+'</div></div>';
+   '<div class="stack"><div class="card">'+toolbar('搜索物料、编码或库位')+table(['物料 / 编码','规格','库位','当前库存','安全库存','状态','操作'],materialRows)+'</div><div class="card">'+cardHead('出入库流水','每笔操作保存处理人、数量和业务说明')+(moves.length?table(['时间','物料','方向','数量','操作人','说明'],moveRows):empty('尚无出入库操作'))+'</div></div>';
  }
  if(page==='data'){
   const [d,sources]=await Promise.all([api('/samples'+query),api('/sources'+query)]);S.cache.samples=d;

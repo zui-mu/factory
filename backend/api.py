@@ -4,7 +4,8 @@ from datetime import datetime
 from .db import connect,rows,one,now,audit,DATA,password_hash,check_password
 from .analytics import analyze
 from .assistant import answer as assistant_answer,provider_status,PRESETS
-from .live import annotate,snapshot,control,timeline,demo_owns_device,defense_owns_device,record_equipment_review
+from .live import (annotate,snapshot,control,timeline,demo_owns_device,defense_owns_device,
+                   defense_owns_material,record_equipment_review,WAREHOUSE_ACTIONS)
 
 class ApiError(Exception):
     def __init__(self,message,status=400):self.message=message;self.status=status
@@ -63,18 +64,16 @@ def dispatch(method,path,p,b,user,federation):
             from .workforce import dispatch as workforce_dispatch
             return workforce_dispatch(c,method,path,p,b,user)
         if method=="GET":
-            if path=="/api/live":
-                f=scope(user,p.get("factory_id")) or 1
+            if path in ('/api/live','/api/live/timeline'):
+                if path.endswith('/timeline'):role(user,'engineer','manager')
+                f=scope(user,p.get('factory_id')) or 1
+                c.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+                c.execute('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')
+                if path.endswith('/timeline'):
+                    return timeline(c,f,number(p,'run_id',1,2147483647,True))
                 did=p.get('device_id')
                 if did:get_entity(c,user,'devices',int(did))
                 return snapshot(c,f,int(did) if did else None)
-            if path=="/api/live/timeline":
-                role(user,'engineer','manager')
-                f=scope(user,p.get('factory_id')) or 1
-                run_id=number(p,'run_id',1,2147483647,True)
-                c.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
-                c.execute('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')
-                return timeline(c,f,run_id)
             if path=="/api/meta":
                 return {"user":{k:v for k,v in user.items() if k!="token"},"factories":rows(c,"SELECT * FROM factories"+(" WHERE id=?" if user["role"]!="admin" else ""),(user["factory_id"],) if user["role"]!="admin" else ()),
                  "users":rows(c,"SELECT id,username,name,role,factory_id,active FROM users WHERE factory_id=? OR (role='admin' AND ?='admin')",(scope(user,p.get("factory_id")) or 1,user["role"])),
@@ -150,10 +149,12 @@ def dispatch(method,path,p,b,user,federation):
 
         if path=="/api/live/demo":
             action=b.get('action')
-            if action=='prepare-defense':role(user,'engineer')
+            if action=='prepare-defense' or action in WAREHOUSE_ACTIONS:role(user,'engineer')
             else:role(user,'engineer','manager')
             f=scope(user,b.get('factory_id')) or 1
-            if action not in ('prepare-defense','start','stop','fault','recover','resume','short-stop','changeover'):raise ApiError('不支持的演示操作')
+            if action not in ('prepare-defense','start','stop','fault','recover','resume','short-stop','changeover')+WAREHOUSE_ACTIONS:raise ApiError('不支持的演示操作')
+            if action in WAREHOUSE_ACTIONS:
+                return control(c,user,f,action,intended_run_id=number(b,'run_id',1,2147483647,True))
             return control(c,user,f,action)
         if path=="/api/password":
             old=required(b,"old_password");new=required(b,"new_password")
@@ -306,6 +307,7 @@ def dispatch(method,path,p,b,user,federation):
             role(user,"operator","engineer","manager")
             m=get_entity(c,user,"materials",int(path.split("/")[3]));qty=number(b,"quantity",.01,1000000)
             if one(c,"SELECT 1 FROM source_records WHERE entity='materials' AND record_id=?",(m["id"],)):raise ApiError("历史库存存档仅供查询，不能作为当前可用库存出入库")
+            if defense_owns_material(c,m):raise ApiError('答辩演示原料请通过设备监控的模拟库位操作移库',409)
             direction=b.get("direction")
             if direction not in ("入库","出库"):raise ApiError("请选择入库或出库")
             new=m["stock"]+(qty if direction=="入库" else -qty)
