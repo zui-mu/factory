@@ -1,0 +1,17 @@
+{
+  "host": "127.0.0.1",
+  "port": 3306,
+  "user": "your_application_user",
+  "password": "your_application_password",
+  "database": "zhiyinyunlian",
+  "node_databases": {
+    "1": "zhiyinyunlian_factory_1",
+    "2": "zhiyinyunlian_factory_2",
+    "3": "zhiyinyunlian_factory_3"
+  },
+  "node_users": {
+    "1": {"user": "your_factory1_user", "password": "your_factory1_password"},
+    "2": {"user": "your_factory2_user", "password": "your_factory2_password"},
+    "3": {"user": "your_factory3_user", "password": "your_factory3_password"}
+  }
+}

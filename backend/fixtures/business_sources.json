@@ -1,0 +1,804 @@
+{
+  "format": 1,
+  "created_at": "2026-10-01T19:37:25",
+  "sources": [
+    {
+      "key": "KTG",
+      "label": "来源项目 A · 业务存档",
+      "factory_id": 1,
+      "sha256": "e8d7943cafc8899ac17baaa08dae17206191b3be20a7c39b626d78fd40bd3fb4",
+      "records": [
+        {
+          "kind": "devices",
+          "source_id": "212",
+          "code": "M0024",
+          "name": "QQQQQ",
+          "line": "来源未注明车间",
+          "original_status": "STOP"
+        },
+        {
+          "kind": "devices",
+          "source_id": "213",
+          "code": "M0036",
+          "name": "测试人员",
+          "line": "来源未注明车间",
+          "original_status": "STOP"
+        },
+        {
+          "kind": "devices",
+          "source_id": "214",
+          "code": "M0046",
+          "name": "WG-A1型纺织机",
+          "line": "来源未注明车间",
+          "original_status": "STOP"
+        },
+        {
+          "kind": "devices",
+          "source_id": "215",
+          "code": "M0047",
+          "name": "uytuyu",
+          "line": "来源未注明车间",
+          "original_status": "STOP"
+        },
+        {
+          "kind": "orders",
+          "source_id": "1",
+          "code": "MO202211030001",
+          "product": "螺丝刀",
+          "batch": "来源未注明批次",
+          "quantity": 10000,
+          "completed": 0,
+          "due_date": "2022-11-30",
+          "created_at": "2022-11-03 21:39:58",
+          "original_status": "FINISHED"
+        },
+        {
+          "kind": "orders",
+          "source_id": "2",
+          "code": "MO202211030002",
+          "product": "螺丝刀刀柄",
+          "batch": "来源未注明批次",
+          "quantity": 10000,
+          "completed": 0,
+          "due_date": "2022-11-30",
+          "created_at": "2022-11-03 21:39:58",
+          "original_status": "FINISHED"
+        },
+        {
+          "kind": "orders",
+          "source_id": "3",
+          "code": "MO202211030003",
+          "product": "螺丝刀刀头",
+          "batch": "来源未注明批次",
+          "quantity": 10000,
+          "completed": 35,
+          "due_date": "2022-11-30",
+          "created_at": "2022-11-03 21:39:58",
+          "original_status": "FINISHED"
+        },
+        {
+          "kind": "orders",
+          "source_id": "4",
+          "code": "MO202309050001",
+          "product": "移液盒",
+          "batch": "BATCH202309051001",
+          "quantity": 10000,
+          "completed": 0,
+          "due_date": "2023-09-30",
+          "created_at": "2023-09-05 20:28:13",
+          "original_status": "FINISHED"
+        },
+        {
+          "kind": "orders",
+          "source_id": "5",
+          "code": "MO202309050002",
+          "product": "透明盒体",
+          "batch": "BATCH202309051001",
+          "quantity": 10000,
+          "completed": 0,
+          "due_date": "2023-09-30",
+          "created_at": "2023-09-05 20:28:13",
+          "original_status": "FINISHED"
+        },
+        {
+          "kind": "orders",
+          "source_id": "6",
+          "code": "MO202309050004",
+          "product": "吸头",
+          "batch": "BATCH202309051001",
+          "quantity": 320000,
+          "completed": 0,
+          "due_date": "2023-09-30",
+          "created_at": "2023-09-05 20:28:13",
+          "original_status": "CONFIRMED"
+        },
+        {
+          "kind": "orders",
+          "source_id": "9",
+          "code": "MO202310290002",
+          "product": "螺丝刀",
+          "batch": "BATCH20231001",
+          "quantity": 9999,
+          "completed": 100,
+          "due_date": "2023-10-31",
+          "created_at": "2023-10-29 22:56:13",
+          "original_status": "CONFIRMED"
+        },
+        {
+          "kind": "orders",
+          "source_id": "10",
+          "code": "MO202310290003",
+          "product": "螺丝刀",
+          "batch": "来源未注明批次",
+          "quantity": 10000,
+          "completed": 0,
+          "due_date": "2023-10-31",
+          "created_at": "2023-10-29 22:59:01",
+          "original_status": "FINISHED"
+        },
+        {
+          "kind": "orders",
+          "source_id": "11",
+          "code": "MO202310290004",
+          "product": "螺丝刀刀头",
+          "batch": "来源未注明批次",
+          "quantity": 10000,
+          "completed": 0,
+          "due_date": "2023-10-31",
+          "created_at": "2023-10-29 22:59:01",
+          "original_status": "FINISHED"
+        },
+        {
+          "kind": "quality",
+          "source_id": "200",
+          "order_source_id": "3",
+          "batch": "IPQC202310180004",
+          "sample_size": 15,
+          "defects": 5,
+          "created_at": "2023-10-18 00:00:00",
+          "original_status": "ACCEPT"
+        },
+        {
+          "kind": "materials",
+          "source_id": "1",
+          "code": "STOCK-1",
+          "name": "PCB颗粒",
+          "spec": "来源未注明",
+          "unit": "KG",
+          "stock": 0.0,
+          "min_stock": 0,
+          "location": "原料仓 / 注塑原料区 / 默认库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "2",
+          "code": "STOCK-2",
+          "name": "色粉【黑色】",
+          "spec": "黑色",
+          "unit": "g",
+          "stock": 0.0,
+          "min_stock": 0,
+          "location": "原料仓 / 注塑原料区 / 默认库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "3",
+          "code": "STOCK-3",
+          "name": "钢筋",
+          "spec": "100mm X  5mm",
+          "unit": "m",
+          "stock": 4895.0,
+          "min_stock": 0,
+          "location": "原料仓 / 五金原料区 / 默认库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "4",
+          "code": "STOCK-4",
+          "name": "钢筋",
+          "spec": "100mm X  5mm",
+          "unit": "m",
+          "stock": 9450.0,
+          "min_stock": 0,
+          "location": "线边库-虚拟 / 线边库库区-虚拟 / 线边库库位-虚拟",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "5",
+          "code": "STOCK-5",
+          "name": "钢筋",
+          "spec": "100mm X  5mm",
+          "unit": "m",
+          "stock": 500.0,
+          "min_stock": 0,
+          "location": "线边库-虚拟 / 线边库库区-虚拟 / 线边库库位-虚拟",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "6",
+          "code": "STOCK-6",
+          "name": "螺丝刀刀头",
+          "spec": "蓝色",
+          "unit": "PCS",
+          "stock": 0.0,
+          "min_stock": 0,
+          "location": "线边库-虚拟 / 线边库库区-虚拟 / 线边库库位-虚拟",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "7",
+          "code": "STOCK-7",
+          "name": "螺丝刀刀头",
+          "spec": "蓝色",
+          "unit": "PCS",
+          "stock": 0.0,
+          "min_stock": 0,
+          "location": "成品仓 / 半成品区 / 注塑半成品库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "8",
+          "code": "STOCK-8",
+          "name": "螺丝刀刀头",
+          "spec": "蓝色",
+          "unit": "PCS",
+          "stock": 0.0,
+          "min_stock": 0,
+          "location": "线边库-虚拟 / 线边库库区-虚拟 / 线边库库位-虚拟",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "9",
+          "code": "STOCK-9",
+          "name": "螺丝刀刀头",
+          "spec": "蓝色",
+          "unit": "PCS",
+          "stock": 0.0,
+          "min_stock": 0,
+          "location": "成品仓 / 半成品区 / 注塑半成品库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "10",
+          "code": "STOCK-10",
+          "name": "螺丝刀刀头",
+          "spec": "蓝色",
+          "unit": "PCS",
+          "stock": 15.0,
+          "min_stock": 0,
+          "location": "成品仓 / 半成品区 / 注塑半成品库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "11",
+          "code": "STOCK-11",
+          "name": "螺丝刀刀头",
+          "spec": "15CM",
+          "unit": "PCS",
+          "stock": 100.0,
+          "min_stock": 0,
+          "location": "成品仓 / 半成品区 / 注塑半成品库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "12",
+          "code": "STOCK-12",
+          "name": "钢筋",
+          "spec": "100mm X  5mm",
+          "unit": "m",
+          "stock": 260.0,
+          "min_stock": 0,
+          "location": "原料仓 / 注塑原料区 / 默认库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "13",
+          "code": "STOCK-13",
+          "name": "钢筋",
+          "spec": "100mm X  5mm",
+          "unit": "m",
+          "stock": 8.0,
+          "min_stock": 0,
+          "location": "原料仓 / 注塑原料区 / 默认库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "14",
+          "code": "STOCK-14",
+          "name": "PCB颗粒",
+          "spec": "来源未注明",
+          "unit": "KG",
+          "stock": 1000.0,
+          "min_stock": 0,
+          "location": "原料仓 / 注塑原料区 / 默认库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "15",
+          "code": "STOCK-15",
+          "name": "色粉【蓝色】",
+          "spec": "蓝色",
+          "unit": "g",
+          "stock": 0.01,
+          "min_stock": 0,
+          "location": "原料仓 / 注塑原料区 / 默认库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        },
+        {
+          "kind": "materials",
+          "source_id": "16",
+          "code": "STOCK-16",
+          "name": "螺丝刀",
+          "spec": "来源未注明",
+          "unit": "PCS",
+          "stock": 100.0,
+          "min_stock": 0,
+          "location": "成品仓 / 成品区 / 默认成品库位",
+          "original_status": "历史库位余额；未套用物料级安全库存"
+        }
+      ],
+      "skipped": [
+        {
+          "kind": "orders",
+          "source_id": "12",
+          "reason": "本平台报工以件计，原工单单位不同"
+        }
+      ]
+    },
+    {
+      "key": "HX",
+      "label": "来源项目 B · 业务存档",
+      "factory_id": 2,
+      "sha256": "75eb91d4b501fb61bf06e1bbeea3103acfb8c5fe7be45728b95b60487360b9cc",
+      "records": [
+        {
+          "kind": "devices",
+          "source_id": "1",
+          "code": "DEV001",
+          "name": "注塑机A1",
+          "line": "一车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "devices",
+          "source_id": "2",
+          "code": "DEV002",
+          "name": "CNC加工中心",
+          "line": "二车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "devices",
+          "source_id": "3",
+          "code": "DEV003",
+          "name": "焊接机器人",
+          "line": "一车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "devices",
+          "source_id": "4",
+          "code": "DEV004",
+          "name": "检测设备A1",
+          "line": "三车间",
+          "original_status": "3"
+        },
+        {
+          "kind": "devices",
+          "source_id": "5",
+          "code": "DEV005",
+          "name": "注塑机A2",
+          "line": "一车间",
+          "original_status": "4"
+        },
+        {
+          "kind": "devices",
+          "source_id": "6",
+          "code": "DEV006",
+          "name": "冲压机B1",
+          "line": "三车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "devices",
+          "source_id": "7",
+          "code": "DEV007",
+          "name": "SMT贴片机",
+          "line": "二车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "devices",
+          "source_id": "8",
+          "code": "DEV008",
+          "name": "老化测试架",
+          "line": "一车间",
+          "original_status": "2"
+        },
+        {
+          "kind": "devices",
+          "source_id": "9",
+          "code": "DEV009",
+          "name": "包装机",
+          "line": "三车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "devices",
+          "source_id": "10",
+          "code": "DEV010",
+          "name": "超声波清洗机",
+          "line": "一车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "devices",
+          "source_id": "11",
+          "code": "DEV202604232008",
+          "name": "测试1",
+          "line": "一车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "devices",
+          "source_id": "12",
+          "code": "DEV202604232026",
+          "name": "测试2",
+          "line": "二车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "devices",
+          "source_id": "13",
+          "code": "DEV202604251041",
+          "name": "测试设备",
+          "line": "一车间",
+          "original_status": "1"
+        },
+        {
+          "kind": "orders",
+          "source_id": "1",
+          "code": "WO20260401001",
+          "product": "ABS塑料粒子",
+          "batch": "来源未注明批次",
+          "quantity": 500,
+          "completed": 0,
+          "due_date": "2026-04-20",
+          "created_at": "2026-04-10 08:00:00",
+          "original_status": "2"
+        },
+        {
+          "kind": "orders",
+          "source_id": "2",
+          "code": "WO20260401002",
+          "product": "金属外壳组件",
+          "batch": "来源未注明批次",
+          "quantity": 300,
+          "completed": 150,
+          "due_date": "2026-04-18",
+          "created_at": "2026-04-08 09:00:00",
+          "original_status": "2"
+        },
+        {
+          "kind": "orders",
+          "source_id": "3",
+          "code": "WO20260401003",
+          "product": "电路板PCB",
+          "batch": "来源未注明批次",
+          "quantity": 200,
+          "completed": 200,
+          "due_date": "2026-04-15",
+          "created_at": "2026-04-05 08:30:00",
+          "original_status": "3"
+        },
+        {
+          "kind": "orders",
+          "source_id": "4",
+          "code": "WO20260401004",
+          "product": "智能控制器",
+          "batch": "来源未注明批次",
+          "quantity": 150,
+          "completed": 80,
+          "due_date": "2026-04-22",
+          "created_at": "2026-04-12 10:00:00",
+          "original_status": "2"
+        },
+        {
+          "kind": "orders",
+          "source_id": "5",
+          "code": "WO20260401005",
+          "product": "传感器模块",
+          "batch": "来源未注明批次",
+          "quantity": 400,
+          "completed": 0,
+          "due_date": "2026-04-25",
+          "created_at": "2026-04-14 14:00:00",
+          "original_status": "1"
+        },
+        {
+          "kind": "orders",
+          "source_id": "6",
+          "code": "WO20260401006",
+          "product": "ABS塑料粒子",
+          "batch": "来源未注明批次",
+          "quantity": 100,
+          "completed": 0,
+          "due_date": "2026-04-20",
+          "created_at": "2026-04-14 15:40:06",
+          "original_status": "1"
+        },
+        {
+          "kind": "orders",
+          "source_id": "7",
+          "code": "WO202604140001",
+          "product": "ABS塑料粒子",
+          "batch": "来源未注明批次",
+          "quantity": 100,
+          "completed": 0,
+          "due_date": "2026-04-20",
+          "created_at": "2026-04-14 15:42:19",
+          "original_status": "1"
+        },
+        {
+          "kind": "orders",
+          "source_id": "8",
+          "code": "WO20260417001",
+          "product": "ABS塑料粒子",
+          "batch": "来源未注明批次",
+          "quantity": 300,
+          "completed": 150,
+          "due_date": "2026-04-26",
+          "created_at": "2026-04-23 11:50:09",
+          "original_status": "2"
+        },
+        {
+          "kind": "orders",
+          "source_id": "9",
+          "code": "WO20260417002",
+          "product": "智能控制器",
+          "batch": "来源未注明批次",
+          "quantity": 200,
+          "completed": 0,
+          "due_date": "2026-04-28",
+          "created_at": "2026-04-23 11:50:09",
+          "original_status": "1"
+        },
+        {
+          "kind": "orders",
+          "source_id": "10",
+          "code": "WO20260417003",
+          "product": "传感器模块",
+          "batch": "来源未注明批次",
+          "quantity": 500,
+          "completed": 500,
+          "due_date": "2026-04-22",
+          "created_at": "2026-04-23 11:50:09",
+          "original_status": "3"
+        },
+        {
+          "kind": "orders",
+          "source_id": "11",
+          "code": "WO202604230002",
+          "product": "ABS塑料粒子",
+          "batch": "来源未注明批次",
+          "quantity": 100,
+          "completed": 0,
+          "due_date": "2026-04-26",
+          "created_at": "2026-04-23 12:02:04",
+          "original_status": "1"
+        },
+        {
+          "kind": "orders",
+          "source_id": "12",
+          "code": "WO202604230003",
+          "product": "金属外壳组件",
+          "batch": "来源未注明批次",
+          "quantity": 100,
+          "completed": 0,
+          "due_date": "2026-04-25",
+          "created_at": "2026-04-23 12:06:01",
+          "original_status": "1"
+        },
+        {
+          "kind": "orders",
+          "source_id": "13",
+          "code": "WO202604230004",
+          "product": "ABS塑料粒子",
+          "batch": "来源未注明批次",
+          "quantity": 100,
+          "completed": 0,
+          "due_date": "2026-04-23",
+          "created_at": "2026-04-23 12:28:12",
+          "original_status": "1"
+        },
+        {
+          "kind": "orders",
+          "source_id": "14",
+          "code": "WO202604230005",
+          "product": "ABS塑料粒子",
+          "batch": "来源未注明批次",
+          "quantity": 100,
+          "completed": 0,
+          "due_date": "2026-04-25",
+          "created_at": "2026-04-23 12:31:07",
+          "original_status": "1"
+        },
+        {
+          "kind": "orders",
+          "source_id": "15",
+          "code": "WO202604250006",
+          "product": "ABS塑料粒子",
+          "batch": "来源未注明批次",
+          "quantity": 100,
+          "completed": 0,
+          "due_date": "2026-04-26",
+          "created_at": "2026-04-25 02:40:17",
+          "original_status": "1"
+        },
+        {
+          "kind": "quality",
+          "source_id": "1",
+          "order_source_id": null,
+          "batch": "BATCH20260401",
+          "sample_size": 20,
+          "defects": 1,
+          "created_at": "",
+          "original_status": "1"
+        },
+        {
+          "kind": "quality",
+          "source_id": "2",
+          "order_source_id": null,
+          "batch": "BATCH20260402",
+          "sample_size": 25,
+          "defects": 0,
+          "created_at": "",
+          "original_status": "1"
+        },
+        {
+          "kind": "quality",
+          "source_id": "3",
+          "order_source_id": null,
+          "batch": "BATCH20260403",
+          "sample_size": 15,
+          "defects": 1,
+          "created_at": "",
+          "original_status": "1"
+        },
+        {
+          "kind": "quality",
+          "source_id": "4",
+          "order_source_id": null,
+          "batch": "BATCH20260404",
+          "sample_size": 30,
+          "defects": 2,
+          "created_at": "",
+          "original_status": "2"
+        },
+        {
+          "kind": "quality",
+          "source_id": "5",
+          "order_source_id": null,
+          "batch": "BATCH20260405",
+          "sample_size": 20,
+          "defects": 0,
+          "created_at": "",
+          "original_status": "1"
+        },
+        {
+          "kind": "quality",
+          "source_id": "6",
+          "order_source_id": null,
+          "batch": "BATCH20260405",
+          "sample_size": 30,
+          "defects": 2,
+          "created_at": "2026-04-23 19:50",
+          "original_status": "1"
+        },
+        {
+          "kind": "quality",
+          "source_id": "7",
+          "order_source_id": null,
+          "batch": "BATCH20260406",
+          "sample_size": 25,
+          "defects": 1,
+          "created_at": "2026-04-23 19:50",
+          "original_status": "1"
+        },
+        {
+          "kind": "quality",
+          "source_id": "8",
+          "order_source_id": null,
+          "batch": "BATCH20260407",
+          "sample_size": 40,
+          "defects": 2,
+          "created_at": "2026-04-23 19:50",
+          "original_status": "1"
+        },
+        {
+          "kind": "quality",
+          "source_id": "9",
+          "order_source_id": null,
+          "batch": "01111",
+          "sample_size": 20,
+          "defects": 1,
+          "created_at": "2026-04-23 12:07:19",
+          "original_status": "1"
+        },
+        {
+          "kind": "quality",
+          "source_id": "10",
+          "order_source_id": null,
+          "batch": "003",
+          "sample_size": 20,
+          "defects": 1,
+          "created_at": "2026-04-25 02:40:37",
+          "original_status": "1"
+        },
+        {
+          "kind": "materials",
+          "source_id": "1",
+          "code": "STOCK-1",
+          "name": "ABS塑料粒子",
+          "spec": "25kg/袋",
+          "unit": "袋",
+          "stock": 3500.0,
+          "min_stock": 0,
+          "location": "原材料仓库",
+          "original_status": "历史库位余额；未套用物料级安全库存；冻结量 0.0"
+        },
+        {
+          "kind": "materials",
+          "source_id": "2",
+          "code": "STOCK-2",
+          "name": "金属外壳组件",
+          "spec": "标准规格",
+          "unit": "个",
+          "stock": 1200.0,
+          "min_stock": 0,
+          "location": "原材料仓库",
+          "original_status": "历史库位余额；未套用物料级安全库存；冻结量 0.0"
+        },
+        {
+          "kind": "materials",
+          "source_id": "3",
+          "code": "STOCK-3",
+          "name": "电路板PCB",
+          "spec": "双面板",
+          "unit": "个",
+          "stock": 180.0,
+          "min_stock": 0,
+          "location": "线边仓-A线",
+          "original_status": "历史库位余额；未套用物料级安全库存；冻结量 0.0"
+        },
+        {
+          "kind": "materials",
+          "source_id": "4",
+          "code": "STOCK-4",
+          "name": "智能控制器",
+          "spec": "型号A1",
+          "unit": "个",
+          "stock": 320.0,
+          "min_stock": 0,
+          "location": "成品仓库",
+          "original_status": "历史库位余额；未套用物料级安全库存；冻结量 0.0"
+        }
+      ],
+      "skipped": []
+    }
+  ]
+}

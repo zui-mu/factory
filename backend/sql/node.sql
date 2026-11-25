@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS samples (
+ id INT PRIMARY KEY AUTO_INCREMENT, temp INT, pressure INT, wear INT, material INT,
+ product INT, defect INT, split VARCHAR(20), KEY sample_split (split)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+CREATE TABLE IF NOT EXISTS state (
+ `key` VARCHAR(64) PRIMARY KEY, value LONGTEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;

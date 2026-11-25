@@ -1,0 +1,23 @@
+[
+  {
+    "file": "factory.mp4",
+    "bytes": 703968,
+    "sha256": "9f3681e5e30f962a355ce8d859f90da762397d643efc5c4af3be9a16780fd6dc",
+    "source": "用户提供的慧析云坊源码素材",
+    "kind": "原项目演示视频，非实时摄像头"
+  },
+  {
+    "file": "liushuixian.mp4",
+    "bytes": 140612,
+    "sha256": "8e86f3df0f4928a9d7c8a9c1cb79ecc39dff3dbc1fb5e5f6a5ad9d65592dd0be",
+    "source": "用户提供的慧析云坊源码素材",
+    "kind": "原项目演示视频，非实时摄像头"
+  },
+  {
+    "file": "liushuixiantwo.mp4",
+    "bytes": 161925,
+    "sha256": "3fdec0e765154ed523d86fb194dacc7039fddfd7ace32e3afa464b910d876151",
+    "source": "用户提供的慧析云坊源码素材",
+    "kind": "原项目演示视频，非实时摄像头"
+  }
+]

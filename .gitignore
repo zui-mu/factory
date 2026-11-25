@@ -1,0 +1,26 @@
+# Local Python environments and caches
+/.venv/
+__pycache__/
+*.py[cod]
+/.pytest_cache/
+
+# Local database, credentials, uploads and database exports
+/data/
+/backend/sql/zhiyinyunlian_full.sql
+.env
+.env.*
+!.env.example
+
+# Generated Unity files and machine-specific editor settings
+/unity/[Bb]uild/
+/unity/[Bb]uilds/
+/unity/Library/
+/unity/Logs/
+/unity/Temp/
+/unity/Obj/
+/unity/obj/
+/unity/UserSettings/
+/unity/MemoryCaptures/
+/unity/.vs/
+/unity/*.csproj
+/unity/*.sln
