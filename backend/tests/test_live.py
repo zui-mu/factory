@@ -2,9 +2,10 @@
 """Process invariants exercised with an injected clock, without touching user data."""
 import unittest
 from datetime import datetime,timedelta
+from pathlib import Path
 from backend.db import SCHEMA,one,rows,connect
 from mysql_support import TestDatabases
-from backend.live import control,advance,describe,annotate,PROFILES
+from backend.live import control,advance,describe,annotate,timeline,PROFILES
 from backend.telemetry import device_freshness
 from backend.api import ApiError
 
@@ -13,13 +14,15 @@ class LiveLineTests(unittest.TestCase):
     def setUpClass(cls):
         cls.mysql=TestDatabases()
         cls.addClassCleanup(cls.mysql.close)
-        with connect(config=cls.mysql.config) as c:c.executescript(SCHEMA)
+        with connect(config=cls.mysql.config) as c:
+            c.executescript(SCHEMA)
+            c.executescript((Path(__file__).resolve().parents[1]/'sql'/'workforce.sql').read_text(encoding='utf-8'))
 
     def setUp(self):
         self.c=connect(config=self.mysql.config);self.c.begin_write()
         for f in (1,2,3):self.c.execute('INSERT INTO factories VALUES(?,?,?)',(f,'测试工厂'+str(f),'匿名园区'))
         self.c.execute("INSERT INTO users(id,username,password,name,role,factory_id) VALUES(1,'tester','test-placeholder','测试员','admin',1)")
-        self.user={'id':1,'username':'tester','factory_id':1};self.clock=datetime.now().replace(microsecond=0)
+        self.user={'id':1,'username':'tester','factory_id':1,'role':'admin'};self.clock=datetime.now().replace(microsecond=0)
         self.run=control(self.c,self.user,1,'start',self.clock)
     def tearDown(self):self.c.close()
     def record(self):return one(self.c,'SELECT * FROM demo_runs WHERE id=?',(self.run['id'],))
@@ -109,5 +112,74 @@ class LiveLineTests(unittest.TestCase):
         self.assertFalse(device_freshness([dict(d)],self.clock-timedelta(seconds=1))[0]['fresh'])
         self.assertEqual(device_freshness([dict(d,temperature=None)],self.clock)[0]['display_status'],'未采集')
         self.assertEqual(device_freshness([dict(d,archived=True)],self.clock)[0]['display_status'],'历史档案')
+
+    def prepare_defense(self):
+        self.action('stop')
+        self.c.execute("INSERT INTO users(id,username,password,name,role,factory_id) VALUES(2,'operator','test','操作员','operator',1)")
+        self.c.execute("""INSERT INTO staff_employees(factory_id,user_id,code,name,workshop,position,team,skills,created_at)
+                          VALUES(1,2,'OP-2','操作员','车间','设备操作岗','生产组','[\"设备点检\"]',?)""",(self.clock.isoformat(),))
+        self.run=control(self.c,self.user,1,'prepare-defense',self.clock)
+
+    def test_defense_timeline_checks_exact_report_material_and_sample_windows(self):
+        self.prepare_defense()
+        plan=one(self.c,'SELECT * FROM staff_plans WHERE id=?',(self.run['staffing']['plan_id'],))
+        self.assertLessEqual(plan['start_at'],self.clock.isoformat())
+        self.assertGreater(plan['end_at'],self.clock.isoformat())
+        batch=self.order()['batch']
+        self.until(lambda:self.order()['completed']>=4)
+        self.action('fault');self.tick(10)
+        self.assertEqual(self.order()['completed'],4)
+        self.assertAlmostEqual(self.stock(),5.84)
+        self.action('recover');self.until(lambda:self.state()['phase']=='awaiting_resume')
+        self.action('resume')
+        manual=self.c.execute("""INSERT INTO quality(factory_id,order_id,batch,sample_size,defects,defect_type,inspector,created_at)
+                                 VALUES(1,?,?,100,0,'模拟外观检测','演示在线检测',?)""",(self.run['order_id'],batch,self.clock.isoformat())).lastrowid
+        self.c.execute("INSERT INTO stock_moves(material_id,direction,quantity,note,user_name,created_at) VALUES(?,'出库',10,'测试人工操作','演示采集器',?)",
+                       (self.run['material_id'],self.clock.isoformat()))
+        self.until(lambda:self.order()['completed']>=7)
+        first=timeline(self.c,1,self.run['id'])['interlocks'][0]
+        self.assertEqual(first['shutdown']['completed_before'],4)
+        self.assertEqual(first['shutdown']['completed_after'],4)
+        self.assertEqual(first['shutdown']['report_count'],0)
+        self.assertEqual(first['shutdown']['consumed_quantity'],0)
+        self.assertEqual(first['restart']['output_count'],3)
+        self.assertEqual(first['restart']['report_count'],3)
+        self.assertAlmostEqual(first['restart']['consumed_quantity'],.12)
+        self.assertEqual([q['sample_size'] for q in first['restart']['quality_records']],[3])
+        self.assertNotEqual(first['restart']['quality_records'][0]['id'],manual)
+        self.assertEqual(first['inspection']['status'],'pending')
+        self.assertEqual(self.order()['batch'],batch)
+        self.action('fault');self.action('fault')
+        incidents=timeline(self.c,1,self.run['id'])['interlocks']
+        self.assertEqual(len(incidents),2)
+        self.assertNotEqual(incidents[0]['anomaly']['id'],incidents[1]['anomaly']['id'])
+        self.assertEqual(incidents[0]['restart']['output_count'],3)
+        self.assertEqual(incidents[1]['restart']['output_count'],0)
+        self.tick(seconds=1200)
+        self.assertFalse(self.state()['running'])
+        self.assertEqual(self.order()['status'],'已取消')
+        self.assertEqual(self.order()['completed'],7)
+
+    def test_rehearsal_warms_shared_device_left_hot_after_stopping(self):
+        self.c.execute("""INSERT INTO devices(id,factory_id,code,name,line,status,temperature,pressure,vibration,runtime,updated_at)
+                      VALUES(3,1,'EQ-03','自动装配单元','装配三线','待机',74,5.2,.8,0,?)
+                      ON DUPLICATE KEY UPDATE code='EQ-03',name='自动装配单元',line='装配三线',temperature=74""",(self.clock.isoformat(),))
+        self.c.execute("""INSERT INTO orders(factory_id,code,product,batch,quantity,status,priority,due_date,device_id,created_at)
+                      VALUES(1,'MO-202610-003','支架','LOT-01-003',1200,'待排产','普通',?,3,?)""",
+                       (self.clock.date().isoformat(),self.clock.isoformat()))
+        self.prepare_defense()
+        self.assertEqual(self.run['device_id'],3)
+        self.action('fault');self.until(lambda:self.device()['temperature']>95)
+        before=timeline(self.c,1,self.run['id']);count=self.total('readings','1')
+        self.action('stop');self.run=self.action('prepare-defense')
+        self.assertEqual(self.run['device_id'],3)
+        self.tick()
+        self.assertGreater(self.device()['temperature'],90)
+        self.assertEqual(self.state()['phase'],'warming')
+        self.assertEqual(self.total('readings','1'),count+1)
+        self.assertEqual(timeline(self.c,1,self.run['id'])['interlocks'],[])
+        self.assertEqual(len(timeline(self.c,1,before['run_id'])['interlocks']),1)
+        self.assertEqual(self.order()['completed'],0)
+        self.until(lambda:self.order()['completed']==1)
 
 if __name__=='__main__':unittest.main()

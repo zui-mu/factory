@@ -4,7 +4,7 @@ from datetime import datetime
 from .db import connect,rows,one,now,audit,DATA,password_hash,check_password
 from .analytics import analyze
 from .assistant import answer as assistant_answer,provider_status,PRESETS
-from .live import annotate,snapshot,control
+from .live import annotate,snapshot,control,timeline,demo_owns_device,defense_owns_device,record_equipment_review
 
 class ApiError(Exception):
     def __init__(self,message,status=400):self.message=message;self.status=status
@@ -68,6 +68,13 @@ def dispatch(method,path,p,b,user,federation):
                 did=p.get('device_id')
                 if did:get_entity(c,user,'devices',int(did))
                 return snapshot(c,f,int(did) if did else None)
+            if path=="/api/live/timeline":
+                role(user,'engineer','manager')
+                f=scope(user,p.get('factory_id')) or 1
+                run_id=number(p,'run_id',1,2147483647,True)
+                c.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+                c.execute('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')
+                return timeline(c,f,run_id)
             if path=="/api/meta":
                 return {"user":{k:v for k,v in user.items() if k!="token"},"factories":rows(c,"SELECT * FROM factories"+(" WHERE id=?" if user["role"]!="admin" else ""),(user["factory_id"],) if user["role"]!="admin" else ()),
                  "users":rows(c,"SELECT id,username,name,role,factory_id,active FROM users WHERE factory_id=? OR (role='admin' AND ?='admin')",(scope(user,p.get("factory_id")) or 1,user["role"])),
@@ -142,10 +149,12 @@ def dispatch(method,path,p,b,user,federation):
             raise ApiError("接口不存在",404)
 
         if path=="/api/live/demo":
-            role(user,'engineer','manager')
+            action=b.get('action')
+            if action=='prepare-defense':role(user,'engineer')
+            else:role(user,'engineer','manager')
             f=scope(user,b.get('factory_id')) or 1
-            if b.get('action') not in ('start','stop','fault','recover','resume','short-stop','changeover'):raise ApiError('不支持的演示操作')
-            return control(c,user,f,b['action'])
+            if action not in ('prepare-defense','start','stop','fault','recover','resume','short-stop','changeover'):raise ApiError('不支持的演示操作')
+            return control(c,user,f,action)
         if path=="/api/password":
             old=required(b,"old_password");new=required(b,"new_password")
             u=one(c,"SELECT * FROM users WHERE id=?",(user["id"],))
@@ -180,12 +189,14 @@ def dispatch(method,path,p,b,user,federation):
                 target={"start":"生产中","pause":"已暂停","resume":"生产中","cancel":"已取消"}.get(action)
                 valid={"待排产":["start","cancel"],"生产中":["pause"],"已暂停":["resume","cancel"]}
                 if action not in valid.get(o["status"],[]):raise ApiError("当前工单状态不允许此操作")
+                if action in ('start','resume') and defense_owns_device(c,o['device_id'],o['id']):
+                    raise ApiError('设备正在进行答辩演示，请停止演示后再启动生产工单',409)
                 c.execute("UPDATE orders SET status=? WHERE id=?",(target,o["id"]))
             audit(c,user,"生产工单 "+str(action),str(o["id"]),factory=o["factory_id"]);return {"ok":True}
         if path.startswith("/api/devices/") and path.endswith("/reading"):
             role(user,"operator","engineer","manager")
             d=get_entity(c,user,"devices",int(path.split("/")[3]))
-            if one(c,'SELECT id FROM demo_runs WHERE device_id=?',(d['id'],)):raise ApiError('演示设备由工况采集器维护，请在大屏切换工况',409)
+            if demo_owns_device(c,d['id']):raise ApiError('演示设备由工况采集器维护，请在大屏切换工况',409)
             t=number(b,"temperature",-50,500);pr=number(b,"pressure",0,50);v=number(b,"vibration",0,100)
             status="预警" if t>90 or pr>8 or v>3 else "运行"
             c.execute("UPDATE devices SET temperature=?,pressure=?,vibration=?,status=?,updated_at=? WHERE id=?",(t,pr,v,status,now(),d["id"]))
@@ -287,7 +298,9 @@ def dispatch(method,path,p,b,user,federation):
                 c.execute("UPDATE anomalies SET status=? WHERE id=?",("已关闭" if status=="已关闭" else "处置中",t["anomaly_id"]))
             else:raise ApiError("无效的工单操作")
             c.execute("UPDATE tasks SET status=?,version=version+1,updated_at=? WHERE id=?",(status,now(),t["id"]))
-            c.execute("INSERT INTO task_events(task_id,user_name,action,note,created_at) VALUES(?,?,?,?,?)",(t["id"],user["name"],status,note,now()))
+            event_id=c.execute("INSERT INTO task_events(task_id,user_name,action,note,created_at) VALUES(?,?,?,?,?)",(t["id"],user["name"],status,note,now())).lastrowid
+            if action=='review' and not a['order_id']:
+                record_equipment_review(c,a,t['id'],event_id,passed)
             audit(c,user,"工单"+status,str(t["id"]),note,t["factory_id"]);return {"status":status}
         if path.startswith("/api/materials/"):
             role(user,"operator","engineer","manager")

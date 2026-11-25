@@ -8,7 +8,7 @@ export const navItems=[
  ['analysis','因果诊断','cause','INTELLIGENCE'],['assistant','AI 因果问答','cause'],['tasks','协同处置','tasks'],['federation','动态联邦分析','network'],
  ['workforce','人员与排班','user','MANAGEMENT'],['materials','仓储物料','box'],['data','数据中心','data'],['settings','系统与审计','settings']
 ];
-export function pageHead(title,description,actions=''){return '<div class="page-head"><div><div class="eyebrow">ZHIYIN YUNLIAN / WORKSPACE</div><h1>'+title+'</h1><p>'+description+'</p></div><div class="row gap8 wrap">'+actions+'</div></div>'}
+export function pageHead(title,description,actions=''){return '<div class="page-head"><div><div class="eyebrow">工厂工作台</div><h1>'+title+'</h1><p>'+description+'</p></div><div class="row gap8 wrap">'+actions+'</div></div>'}
 const cardHead=(title,sub='',right='')=>'<div class="card-head"><div><h2>'+title+'</h2>'+(sub?'<p>'+sub+'</p>':'')+'</div>'+right+'</div>';
 const exportBtn=kind=>btn(icon('download')+'导出记录','export','data-kind="'+kind+'"');
 const toolbar=(placeholder,extra='')=>'<div class="toolbar"><div class="search">'+icon('search')+'<input id="search" aria-label="搜索记录" placeholder="'+placeholder+'"></div>'+extra+'</div>';
@@ -94,7 +94,7 @@ async function renderPageContent(page,S,api){
  if(page==='settings'){
   const logs=S.user.role==='operator'?[]:await api('/audit'+query);
   return pageHead('系统与审计','管理使用边界，保存每一次关键操作。',btn(icon('settings')+'修改密码','change-password'))+
-   '<div class="grid2 mb16"><div class="card">'+cardHead('质因云联','从车间感知到生产决策的智慧工厂平台')+'<dl><div class="kv"><dt>应用版本</dt><dd>1.4.0 · 本地可运行版</dd></div><div class="kv"><dt>当前用户</dt><dd>'+esc(S.user.name)+' / '+esc(S.user.username)+'</dd></div><div class="kv"><dt>数据存储</dt><dd>本地持久化，重启后保留业务记录</dd></div><div class="kv"><dt>平台能力</dt><dd>生产 · 设备 · 质量 · 诊断 · 处置 · 仓储 · 协同</dd></div></dl></div><div class="card">'+cardHead('数据与模型说明')+'<p class="instruction">演示业务与算法样本为模拟数据，接入的项目业务存档单独标明来源。因果分析使用明确假设下的分层效应估计，联邦学习运行真实的本地训练与参数聚合。应用不自动控制真实设备。</p><div class="mt16">'+notice('演示账号具有不同角色权限。正式接入真实数据前，请修改默认密码，并按实际部署环境配置网络保护与数据授权。')+'</div></div></div>'+
+   '<div class="grid2 mb16"><div class="card">'+cardHead('全景可视化数字工厂','从车间感知到生产决策的智慧工厂平台')+'<dl><div class="kv"><dt>应用版本</dt><dd>1.4.0 · 本地可运行版</dd></div><div class="kv"><dt>当前用户</dt><dd>'+esc(S.user.name)+' / '+esc(S.user.username)+'</dd></div><div class="kv"><dt>数据存储</dt><dd>本地持久化，重启后保留业务记录</dd></div><div class="kv"><dt>平台能力</dt><dd>生产 · 设备 · 质量 · 诊断 · 处置 · 仓储 · 协同</dd></div></dl></div><div class="card">'+cardHead('数据与模型说明')+'<p class="instruction">演示业务与算法样本为模拟数据，接入的项目业务存档单独标明来源。因果分析使用明确假设下的分层效应估计，联邦学习运行真实的本地训练与参数聚合。应用不自动控制真实设备。</p><div class="mt16">'+notice('演示账号具有不同角色权限。正式接入真实数据前，请修改默认密码，并按实际部署环境配置网络保护与数据授权。')+'</div></div></div>'+
    '<div class="card">'+cardHead('操作审计','记录登录、数据变更、分析与协同任务',S.user.role!=='operator'?exportBtn('audit'):'')+(logs.length?table(['时间','用户','操作','对象','详情'],logs.map(l=>'<tr><td>'+date(l.created_at)+'</td><td>'+esc(l.user_name)+'</td><td>'+esc(l.action)+'</td><td>'+esc(l.entity)+'</td><td style="white-space:normal;max-width:400px">'+esc(l.detail)+'</td></tr>').join('')):empty('当前角色无审计访问权限或尚无记录'))+'</div>';
  }
  return empty('页面不存在');

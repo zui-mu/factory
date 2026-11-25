@@ -1,6 +1,7 @@
 import {conditionSummary,processCharts} from './conditions.js';
 import {esc,fmt,pct,icon,btn} from './ui.js';
 import {morph} from './live-ui.js';
+import {renderDefenseRecord} from './defense.js';
 const block=(name,title,extra='')=>'<section class="control-panel cp-'+name+'"><div class="cp-head"><h2>'+title+'</h2>'+extra+'</div><div id="monitor-'+name+'" class="cp-body"></div></section>';
 const value=(v,digits=1)=>v==null?'—':Number(v).toFixed(digits);
 const time=s=>s?s.slice(11,19):'未采集';
@@ -29,32 +30,71 @@ async function load(S,api,selected){const q='?factory_id='+S.factory;const [d,m,
 function regions(data,mode='temperature'){const {d,m,ds,l}=data;return {sensors:sensors(l),equipment:equipment(ds),alerts:alerts(d),stats:stats(d),production:gauge(d),orders:orders(d),stock:stock(m),events:events(l),trend:mode==='history'?chart(d,l):processCharts(l,mode),condition:conditionSummary(l)}}
 export async function renderMonitor(S,api){
  const data=await load(S,api);S.cache.controlroom=data;
+ const canPrepareDefense=Number(S.factory)===1&&['admin','engineer'].includes(S.user.role);
  const videos=[['factory.mp4','01','工厂全景'],['liushuixian.mp4','02','生产流水线 A'],['liushuixiantwo.mp4','03','生产流水线 B']];
- return '<div class="monitor-board control-room"><header class="control-heading"><div class="control-brand"><img src="/logo.svg" alt=""><span>质因云联<small>SMART FACTORY</small></span></div><div class="control-title"><h1>生产监控大屏</h1><p>从车间感知到生产决策 · '+esc(S.meta.factories.find(f=>f.id===S.factory)?.name||'智慧工厂')+'</p></div><div class="control-clock"><strong id="monitor-clock">--:--:--</strong><small id="monitor-date"></small></div></header>'+
- '<div class="screen-toolbar"><span class="screen-source" id="monitor-source">采集记录</span><span id="monitor-sync">正在连接</span><div class="screen-actions">'+btn('返回工作台','go','data-page="overview"')+btn('暂停数据刷新','monitor-poll')+btn('全屏大屏','monitor-fullscreen')+'</div></div>'+
+ return '<div class="monitor-board control-room"><header class="control-heading"><div class="control-brand"><img src="/logo.svg" alt=""><span>全景可视化数字工厂<small>SMART FACTORY</small></span></div><div class="control-title"><h1>生产监控大屏</h1><p>从车间感知到生产决策 · '+esc(S.meta.factories.find(f=>f.id===S.factory)?.name||'智慧工厂')+'</p></div><div class="control-clock"><strong id="monitor-clock">--:--:--</strong><small id="monitor-date"></small></div></header>'+
+ '<div class="screen-toolbar"><span class="screen-source" id="monitor-source">采集记录</span><span id="monitor-sync">正在连接</span><div class="screen-actions">'+btn('返回工作台','go','data-page="overview"')+(canPrepareDefense?btn('准备答辩场景','demo-prepare-defense'):'')+(S.user.role!=='operator'?btn('处置记录','monitor-defense-record'):'')+btn('暂停数据刷新','monitor-poll')+btn('全屏大屏','monitor-fullscreen')+'</div></div>'+
  '<div id="monitor-condition"></div><div class="control-grid">'+block('sensors','设备传感器','<select id="monitor-device-select" aria-label="选择监测设备">'+data.ds.map(d=>'<option value="'+d.id+'" '+(d.id===data.l.device?.id?'selected':'')+'>'+esc(d.code)+' · '+esc(d.name)+'</option>').join('')+'</select>' )+block('equipment','设备运行状态','<span>最近采集</span>')+block('alerts','异常与处置','<span>点击追溯 →</span>')+block('stats','生产任务统计')+block('production','生产进度','<span>工单口径</span>')+
  '<section class="control-panel cp-cameras"><div class="cp-head"><h2>操作车间展示</h2>'+btn('暂停全部视频','monitor-videos')+'</div><div class="camera-stage">'+videos.map(([src,id,label],i)=>'<article class="monitor-camera '+(i===0?'camera-main':'')+'" data-camera="'+i+'"><video src="/api/media/'+src+'" autoplay muted loop playsinline preload="metadata" aria-label="'+label+'演示视频"></video><button data-action="camera-select" data-camera="'+i+'"><i></i>CAM '+id+' · '+label+'<em>录制演示</em></button><div class="camera-error" hidden>视频加载失败，请重新登录。</div></article>').join('')+'</div><div class="cp-head events-title"><h2>现场事件流水</h2><span>业务操作自动同步</span></div><div id="monitor-events" class="cp-body"></div></section>'+
 block('trend','工况与产出趋势','<select id="monitor-trend-mode" aria-label="选择趋势指标"><option value="temperature">温度 · 15分钟</option><option value="pressure">压力 · 15分钟</option><option value="vibration">振动 · 15分钟</option><option value="quality">分组检测</option><option value="history">历史汇总</option></select>')+block('orders','生产订单','<span>交期与进度</span>')+block('stock','物料与补料','<span>按物料单位</span>')+'</div>'+
- '<footer class="control-footer"><span><i></i>录像演示 · 原始视频素材</span><span id="monitor-demo-state">演示产线未启动</span><div>'+(S.user.role!=='operator'?btn('启动演示产线','demo-start')+'<select id="monitor-scenario" aria-label="选择演示工况"><option value="short-stop">短暂停机</option><option value="changeover">换料</option><option value="fault">温控故障</option></select>'+btn('触发工况','demo-scenario')+btn('恢复温控','demo-recover'):'')+btn('退出登录','logout')+'</div></footer></div>';
+ '<footer class="control-footer"><span><i></i>录像演示 · 原始视频素材</span><span id="monitor-demo-state">演示产线未启动</span><div>'+(S.user.role!=='operator'?btn('启动演示产线','demo-start')+'<select id="monitor-scenario" aria-label="选择演示工况"><option value="short-stop">短暂停机</option><option value="changeover">换料</option><option value="fault">温控故障</option></select>'+btn('触发工况','demo-scenario')+btn('恢复温控','demo-recover'):'')+btn('退出登录','logout')+'</div></footer>'+
+ '<dialog class="defense-dialog" aria-labelledby="defense-title"><div class="defense-dialog-head"><h2 id="defense-title">演示产线处置记录</h2><form method="dialog"><button type="submit" class="btn small">关闭</button></form></div><div class="defense-dialog-body" aria-busy="false"></div><p class="defense-error" role="status" hidden></p></dialog></div>';
 }
 export function mountMonitor(S,api){
  const board=document.querySelector('.control-room');if(!board)return()=>{};
- let disposed=false,paused=false,selected=null,timer,clockTimer,scrollTimer,trendMode='temperature',latestData=S.cache.controlroom;const factory=S.factory;
+ let disposed=false,paused=false,demoPending=false,selected=null,timer,clockTimer,scrollTimer,trendMode='temperature',latestData=S.cache.controlroom;const factory=S.factory;
+  const recordDialog=board.querySelector('.defense-dialog');
+  const recordBody=recordDialog.querySelector('.defense-dialog-body');
+  const recordError=recordDialog.querySelector('.defense-error');
+  let recordRequest=0;
+  const canControlDefense=['admin','engineer'].includes(S.user.role);
+  async function refreshRecord(){
+   const runId=latestData.l.demo?.id;
+   if(!recordDialog.open||!runId)return;
+   const request=++recordRequest;
+   try{
+    const record=await api('/live/timeline?factory_id='+factory+'&run_id='+runId);
+    if(disposed||!recordDialog.open||request!==recordRequest)return;
+    morph(recordBody,renderDefenseRecord(record));
+    recordError.hidden=true;
+   }catch(error){
+    if(disposed||!recordDialog.open||request!==recordRequest)return;
+    recordError.textContent=error.message||'暂时无法读取处置记录';
+    recordError.hidden=false;
+   }finally{
+    if(request===recordRequest)recordBody.setAttribute('aria-busy','false');
+   }
+  }
+  recordDialog.addEventListener('close',()=>{recordRequest++});
  function update(data){
   if(disposed)return;latestData=data;
   for(const [id,html] of Object.entries(regions(data,trendMode)))morph(board.querySelector('#monitor-'+id),html);
   const selector=board.querySelector('#monitor-device-select'),options=data.ds.map(d=>'<option value="'+d.id+'">'+esc(d.code)+' · '+esc(d.name)+'</option>').join('');
   if(selector.dataset.options!==options){selector.innerHTML=options;selector.dataset.options=options}selector.value=String(data.l.device?.id||'');
-  const run=data.l.demo;
-  board.querySelector('#monitor-source').textContent=run?.running?'演示产线运行中 · 模拟数据':'业务采集记录 · 演示环境';
-  board.querySelector('#monitor-demo-state').textContent=run?(run.running?'演示运行 · ':'演示停止 · ')+(run.reason||'等待首条采集'):'演示产线未启动';
-  const start=board.querySelector('[data-action="demo-start"],[data-action="demo-stop"]');if(start){start.disabled=false;start.dataset.action=run?.running?'demo-stop':'demo-start';start.textContent=run?.running?'停止演示':'启动演示产线'}
-  const scenario=board.querySelector('[data-action=demo-scenario]');if(scenario)scenario.disabled=!run?.running;const recovery=board.querySelector('[data-action=demo-recover],[data-action=demo-resume]');if(recovery){recovery.dataset.action=run?.phase==='awaiting_resume'?'demo-resume':'demo-recover';recovery.textContent=run?.phase==='awaiting_resume'?'确认复产':run?.phase==='cooling'?'降温观察中':'恢复温控';recovery.disabled=!run?.running||!['fault','awaiting_resume'].includes(run.phase)}
+  const run=data.l.demo,defense=run?.mode==='defense';
+  const blocked=demoPending||(defense&&!canControlDefense);
+  const prepare=board.querySelector('[data-action="demo-prepare-defense"]');
+  if(prepare)prepare.disabled=demoPending;
+  const recordButton=board.querySelector('[data-action="monitor-defense-record"]');
+  if(recordButton)recordButton.disabled=!run?.id;
+  board.querySelector('#monitor-source').textContent=defense?'答辩产线 · 模拟数据':run?.running?'演示产线运行中 · 模拟数据':'业务采集记录 · 演示环境';
+  const demoState=board.querySelector('#monitor-demo-state');
+  demoState.removeAttribute('role');
+  demoState.textContent=run?(run.running?'演示运行 · ':'演示停止 · ')+(run.reason||'等待首条采集'):'演示产线未启动';
+  const start=board.querySelector('[data-action="demo-start"],[data-action="demo-stop"]');if(start){start.disabled=demoPending||(defense&&run?.running&&!canControlDefense);start.dataset.action=run?.running?'demo-stop':'demo-start';start.textContent=run?.running?'停止演示':'启动演示产线'}
+  const scenario=board.querySelector('[data-action=demo-scenario]'),scenarioSelect=board.querySelector('#monitor-scenario');
+  if(scenario){
+   scenarioSelect.hidden=defense;
+   if(defense)scenarioSelect.value='fault';
+   scenario.textContent=defense?'注入温控故障':'触发工况';
+   scenario.disabled=blocked||!run?.running||(defense&&run.phase!=='producing');
+  }
+  const recovery=board.querySelector('[data-action=demo-recover],[data-action=demo-resume]');if(recovery){recovery.dataset.action=run?.phase==='awaiting_resume'?'demo-resume':'demo-recover';recovery.textContent=run?.phase==='awaiting_resume'?'确认复产':run?.phase==='cooling'?'降温观察中':'恢复温控';recovery.disabled=blocked||!run?.running||!['fault','awaiting_resume'].includes(run.phase)}
   board.querySelector('#monitor-sync').textContent='查询 '+time(data.l.server_time)+' · 采集 '+time(data.l.device?.updated_at);
   board.dataset.synced=String(Date.now());board.dataset.connected='true';
  }
  update(S.cache.controlroom);
- const refresh=async()=>{try{const data=await load({factory},api,selected);if(!disposed)update(data)}catch(e){if(!disposed){board.querySelector('#monitor-sync').textContent='连接中断 · 保留最近数据';board.dataset.connected='false'}}};
+ const refresh=async()=>{try{const data=await load({factory},api,selected);if(!disposed){update(data);await refreshRecord()}}catch(e){if(!disposed){board.querySelector('#monitor-sync').textContent='连接中断 · 保留最近数据';board.dataset.connected='false'}}};
  const tick=async()=>{if(disposed)return;if(!paused&&!document.hidden)await refresh();if(!disposed)timer=setTimeout(tick,3000)};
  const clock=()=>{const n=new Date();board.querySelector('#monitor-clock').textContent=n.toLocaleTimeString('zh-CN',{hour12:false});board.querySelector('#monitor-date').textContent=n.toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'})};clock();clockTimer=setInterval(clock,1000);
  board.querySelectorAll('video').forEach(v=>{v.addEventListener('error',()=>v.parentElement.querySelector('.camera-error').hidden=false);v.play().catch(()=>{})});
@@ -62,11 +102,40 @@ export function mountMonitor(S,api){
  board.querySelector('#monitor-trend-mode').addEventListener('change',e=>{trendMode=e.target.value;update(latestData)});
  const click=async e=>{const button=e.target.closest('[data-action]'),action=button?.dataset.action;
   if(action==='monitor-poll'){paused=!paused;button.textContent=paused?'继续数据刷新':'暂停数据刷新';board.dataset.paused=String(paused);if(paused)board.querySelector('#monitor-sync').textContent='数据刷新已暂停，显示最近记录';else await refresh()}
+  if(action==='monitor-defense-record'&&!recordDialog.open){
+   recordBody.innerHTML='<p class="defense-empty">正在读取处置记录…</p>';
+   recordBody.setAttribute('aria-busy','true');
+   recordError.hidden=true;
+   recordDialog.showModal();
+   await refreshRecord();
+  }
   if(action==='monitor-videos'){const videos=[...board.querySelectorAll('video')],play=videos.every(v=>v.paused);videos.forEach(v=>play?v.play().catch(()=>{}):v.pause());button.textContent=play?'暂停全部视频':'继续播放视频'}
   if(action==='camera-select')board.querySelectorAll('.monitor-camera').forEach(c=>c.classList.toggle('camera-main',c.dataset.camera===button.dataset.camera));
   if(action==='monitor-device'){selected=Number(button.dataset.id);await refresh()}
   if(action==='monitor-fullscreen'){try{if(document.fullscreenElement)await document.exitFullscreen();else await board.requestFullscreen()}catch{board.querySelector('#monitor-sync').textContent='可使用浏览器 F11 全屏'}}
-  if(action?.startsWith('demo-')){button.disabled=true;let failure='';try{await api('/live/demo',{factory_id:factory,action:action==='demo-scenario'?board.querySelector('#monitor-scenario').value:action.slice(5)});selected=null;await refresh()}catch(err){failure=err.message}finally{if(!disposed){update(latestData);if(failure){board.querySelector('#monitor-demo-state').textContent=failure;board.querySelector('#monitor-demo-state').setAttribute('role','alert')}}}}
+  if(action?.startsWith('demo-')&&!demoPending){
+   demoPending=true;
+   const scenario=board.querySelector('#monitor-scenario');
+   const requested=action==='demo-scenario'?scenario.value:action.slice(5);
+   update(latestData);
+   let failure='';
+   try{
+    await api('/live/demo',{factory_id:factory,action:requested});
+    selected=null;
+    await refresh();
+   }catch(error){failure=error.message}
+   finally{
+    demoPending=false;
+    if(!disposed){
+     update(latestData);
+     if(failure){
+      const status=board.querySelector('#monitor-demo-state');
+      status.textContent=failure;
+      status.setAttribute('role','alert');
+     }
+    }
+   }
+  }
  };
  board.addEventListener('click',click);timer=setTimeout(tick,3000);
  scrollTimer=setInterval(()=>{if(paused||document.hidden||matchMedia('(max-width:760px),(prefers-reduced-motion:reduce)').matches)return;for(const id of ['equipment','alerts','orders','stock','events']){const el=board.querySelector('#monitor-'+id);if(el.matches(':hover')||el.contains(document.activeElement)||el.scrollHeight<=el.clientHeight+2)continue;el.scrollTo({top:el.scrollTop+el.clientHeight>=el.scrollHeight-3?0:el.scrollTop+el.clientHeight*.75,behavior:'smooth'})}},8000);

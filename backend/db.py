@@ -18,9 +18,9 @@ def password_hash(password,salt=None):
     return salt+":"+hashlib.pbkdf2_hmac("sha256",password.encode(),salt.encode(),180000).hex()
 def check_password(password,stored):
     return secrets.compare_digest(password_hash(password,stored.split(":")[0]),stored)
-def audit(c,user,action,entity,detail="",factory=None):
-    c.execute("INSERT INTO audit(user_name,action,entity,detail,factory_id,created_at) VALUES(?,?,?,?,?,?)",
-      (user["username"],action,entity,str(detail)[:1500],factory if factory is not None else user.get("factory_id"),now()))
+def audit(c,user,action,entity,detail="",factory=None,*,stamp=None):
+    return c.execute("INSERT INTO audit(user_name,action,entity,detail,factory_id,created_at) VALUES(?,?,?,?,?,?)",
+      (user["username"],action,entity,str(detail)[:1500],factory if factory is not None else user.get("factory_id"),stamp or now())).lastrowid
 def observations(seed,n,shift=0):
     r=random.Random(seed); result=[]
     for i in range(n):

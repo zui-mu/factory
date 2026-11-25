@@ -192,14 +192,19 @@ def save_shift(c,user,b):
 
 
 def save_plan(c,user,b):
-    from .api import role,scope
+    from .api import role
     role(user,'manager')
+    return write_plan(c,user,b,now())
+
+
+def write_plan(c,user,b,current):
+    from .api import scope
     old=scoped(c,user,'staff_plans',b['id']) if b.get('id') else None
     factory=old['factory_id'] if old else scope(user,b.get('factory_id')) or 1
     if old:
         check_version(old,b)
         if old['status']=='已取消': fail('已取消的排班不能修改')
-        if old['end_at']<=now(): fail('已结束的排班不能修改')
+        if old['end_at']<=current: fail('已结束的排班不能修改')
     if old and b.get('action')=='cancel':
         note=text_value(b,'note',500)
         c.execute("UPDATE staff_plans SET status='已取消',note=?,version=version+1 WHERE id=?",(note,old['id']))
@@ -211,7 +216,7 @@ def save_plan(c,user,b):
     start,end=shift_times(work_date,shift['start_time'],shift['end_time'])
     # Staffing-only edits must not silently adopt later changes to the shift template.
     if old and old['shift_id']==shift['id'] and old['work_date']==work_date: start,end=old['start_at'],old['end_at']
-    if end<=now(): fail('不能发布已经结束的班次')
+    if end<=current: fail('不能发布已经结束的班次')
     line=text_value(b,'line')
     if not one(c,'SELECT id FROM devices WHERE factory_id=? AND line=?',(factory,line)): fail('请选择本工厂已有产线')
     skill=text_value(b,'required_skill',40,True)
@@ -234,10 +239,57 @@ def save_plan(c,user,b):
         c.execute('UPDATE staff_plans SET shift_id=?,work_date=?,line=?,start_at=?,end_at=?,required_count=?,required_skill=?,note=?,version=version+1 WHERE id=?',values+(pid,))
         c.execute('DELETE FROM staff_assignments WHERE plan_id=?',(pid,))
     else:
-        pid=c.execute('INSERT INTO staff_plans(shift_id,work_date,line,start_at,end_at,required_count,required_skill,note,factory_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',values+(factory,now())).lastrowid
+        pid=c.execute('INSERT INTO staff_plans(shift_id,work_date,line,start_at,end_at,required_count,required_skill,note,factory_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',values+(factory,current)).lastrowid
     c.executemany('INSERT INTO staff_assignments(plan_id,employee_id) VALUES(?,?)',[(pid,eid) for eid in ids])
     audit(c,user,'调整排班' if old else '发布排班',str(pid),json.dumps({'before':{'start':old['start_at'],'end':old['end_at'],'line':old['line'],'employees':[x['employee_id'] for x in before]} if old else None,'after':{'start':start,'end':end,'line':line,'employees':ids},'note':note,'warnings':warnings},ensure_ascii=False),factory)
     return {'id':pid,'warnings':warnings}
+
+
+def prepare_defense_staffing(c,user,factory,line,current):
+    """Use an existing operator account and publish a plan through the normal checks."""
+    skill='设备点检'
+    stamp=current.isoformat(timespec='seconds')
+    starts=current.replace(second=0,microsecond=0)
+    initial_end=starts+timedelta(minutes=25)
+    earliest_end=(current+timedelta(minutes=3)).isoformat(timespec='seconds')
+    accounts={a['id']:a for a in rows(c,"SELECT id,name FROM users WHERE factory_id=? AND role='operator' AND active=1",(factory,))}
+    operators=[e for e in employee_rows(c,factory) if e['user_id'] in accounts and e['status']=='在职' and skill in e['skills']]
+    plans=plan_rows(c,factory,starts.isoformat(timespec='seconds'),initial_end.isoformat(timespec='seconds'))
+    plans=[p for p in plans if p['status']=='已发布']
+
+    def assignment(plan,operator):
+        account=accounts[operator['user_id']]
+        return {'plan_id':plan['id'],'employee_id':operator['id'],'operator_id':account['id'],
+                'operator_name':account['name'],'start_at':plan['start_at'],'end_at':plan['end_at'],
+                'line':plan['line'],'same_line':plan['line']==line}
+
+    current_duty=[]
+    for operator in operators:
+        for plan in plans:
+            if (operator['id'] in plan['employee_ids'] and plan['start_at']<=stamp and
+                    plan['end_at']>=earliest_end and not approved_leave(c,operator['id'],stamp,earliest_end)):
+                if plan['line']==line:return assignment(plan,operator)
+                current_duty.append((plan,operator))
+
+    for operator in operators:
+        end=initial_end.isoformat(timespec='seconds')
+        for plan in plans:
+            if plan['line']==line or operator['id'] in plan['employee_ids']:
+                end=min(end,plan['start_at'])
+        if end<earliest_end or approved_leave(c,operator['id'],starts.isoformat(timespec='seconds'),end):continue
+        end_at=datetime.fromisoformat(end)
+        start_time=starts.strftime('%H:%M');end_time=end_at.strftime('%H:%M')
+        shift_name='答辩演示短班 '+start_time+'–'+end_time
+        shift=one(c,'SELECT id,start_time,end_time FROM staff_shifts WHERE factory_id=? AND name=?',(factory,shift_name))
+        if shift and (shift['start_time'],shift['end_time'])!=(start_time,end_time):continue
+        shift_id=shift['id'] if shift else c.execute('INSERT INTO staff_shifts(factory_id,name,start_time,end_time) VALUES(?,?,?,?)',(factory,shift_name,start_time,end_time)).lastrowid
+        plan_id=write_plan(c,user,{'factory_id':factory,'shift_id':shift_id,'work_date':starts.date().isoformat(),
+                           'line':line,'required_count':1,'required_skill':skill,'employee_ids':[operator['id']],
+                           'note':'答辩演示短班，指派已有设备点检技能的现场操作员。'},stamp)['id']
+        return assignment(one(c,'SELECT * FROM staff_plans WHERE id=?',(plan_id,)),operator)
+
+    if current_duty:return assignment(*current_duty[0])
+    fail('当前没有可用于演示的设备点检操作员，请核对账号、技能、排班与请假后重试',409)
 
 
 def leave(c,user,b):
