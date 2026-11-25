@@ -9,6 +9,18 @@ from .api import dispatch,ApiError,role,get_entity,scope
 WRITE_LOCK=threading.RLock()
 LOGIN_ATTEMPTS={}
 WEB=(ROOT/"frontend").resolve()
+
+def webgl_ready():
+    build=WEB/"factory-3d"/"FactoryCampus"/"Build"
+    try:
+        for suffix in ("loader.js","data","framework.js","wasm"):
+            asset=(build/("FactoryCampus."+suffix)).resolve()
+            if WEB not in asset.parents or not asset.is_file() or not asset.stat().st_size:
+                return False
+    except OSError:
+        return False
+    return True
+
 def create_server(host,port,federation):
     class PlatformHTTPServer(ThreadingHTTPServer):
         # Windows SO_REUSEADDR can allow a second live listener on the same port.
@@ -55,7 +67,7 @@ def create_server(host,port,federation):
         def process(self):
             parsed=urlsplit(self.path);path=unquote(parsed.path);params={k:v[-1] for k,v in parse_qs(parsed.query).items()}
             if self.command=="GET" and path=="/api/health":
-                return self.response({"ok":True,"name":"质因云联","version":"1.5.0","database":"MySQL"})
+                return self.response({"ok":True,"name":"质因云联","version":"1.5.0","database":"MySQL","webgl_ready":webgl_ready()})
             if not path.startswith("/api/"):
                 if self.command!="GET":raise ApiError("不支持的方法",405)
                 file=(WEB/("index.html" if path=="/" else path.lstrip("/"))).resolve()

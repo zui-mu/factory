@@ -61,6 +61,10 @@ class StaticWebGLTests(unittest.TestCase):
                         for path in ('/api/health','/factory-3d/FactoryCampus/index.html'):
                             with urllib.request.urlopen(base+path,timeout=5) as reply:
                                 self.assertNotIn('wasm-unsafe-eval',reply.headers['Content-Security-Policy'])
+                                if path=='/api/health':self.assertTrue(json.load(reply)['webgl_ready'])
+                        (build/'FactoryCampus.wasm').write_bytes(b'')
+                        with urllib.request.urlopen(base+'/api/health',timeout=5) as reply:
+                            self.assertFalse(json.load(reply)['webgl_ready'])
                     finally:
                         server.shutdown();thread.join(timeout=5)
 
